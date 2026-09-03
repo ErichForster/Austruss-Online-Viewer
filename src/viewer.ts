@@ -80,7 +80,12 @@ export class IfcViewer {
     this.ifcLoader = this.components.get(OBC.IfcLoader);
     await this.ifcLoader.setup({
       autoSetWasm: false,
-      wasm: { path: "/vendor/web-ifc/", absolute: true },
+      // Must respect Vite's base path (e.g. "/Austruss-Online-Viewer/" on
+      // GitHub Pages), not just "/" — a hardcoded root path here works on
+      // localhost (served at "/") but silently 404s once deployed to a
+      // repo subpath, which is exactly why this needs BASE_URL rather than
+      // a literal string.
+      wasm: { path: `${import.meta.env.BASE_URL}vendor/web-ifc/`, absolute: true },
       // `webIfc` is a full replacement, not a merge — COORDINATE_TO_ORIGIN
       // must be included explicitly or the model loads at its real-world
       // survey coordinates, which for structural/civil exports can be far
