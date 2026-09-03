@@ -1,0 +1,154 @@
+/* ---------------------------------------------------------------
+   Setout — design tokens
+   Austruss brand: orange #eb851a, graphite gray #6d6d6d, extracted
+   directly from the logo file. Dark theme's background (#0e0101) is
+   lifted from Austruss's own Sketchfab viewer background. Both themes
+   share the same accent/gray so the brand reads consistently either way.
+   ------------------------------------------------------------- */
+:root,
+[data-theme="dark"] {
+  --bg-void: #0e0101;
+  --bg-panel: #170707;
+  --bg-panel-raised: #1f0a0a;
+  --bg-hover: #2a1010;
+  --border: #2e1414;
+  --border-soft: #200d0d;
+
+  --text-primary: #f5efec;
+  --text-secondary: #b3a19c;
+  --text-muted: #6d6d6d;
+
+  --accent: #eb851a;
+  --accent-soft: rgba(235, 133, 26, 0.14);
+  --accent-strong: #f5a041;
+  --accent-ink: #201705;
+
+  --select: #6fa8c9;
+  --select-soft: rgba(111, 168, 201, 0.16);
+
+  --danger: #cf6a5f;
+
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --bg-void: #f7f5f3;
+  --bg-panel: #ffffff;
+  --bg-panel-raised: #f0ece9;
+  --bg-hover: #eae4e0;
+  --border: #ddd5d0;
+  --border-soft: #e8e2de;
+
+  --text-primary: #2a2624;
+  --text-secondary: #6d6d6d;
+  --text-muted: #948d89;
+
+  --accent: #eb851a;
+  --accent-soft: rgba(235, 133, 26, 0.12);
+  --accent-strong: #d9770f;
+  --accent-ink: #2a1a04;
+
+  --select: #3f7fa3;
+  --select-soft: rgba(63, 127, 163, 0.14);
+
+  --danger: #b8453a;
+
+  color-scheme: light;
+}
+
+:root {
+  --font-ui: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --radius-sm: 3px;
+  --radius-md: 5px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg-void);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+#app {
+  height: 100%;
+}
+
+button {
+  font-family: inherit;
+}
+
+::selection {
+  background: var(--select-soft);
+}
+
+/* Scrollbars — thin, quiet */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Header logo mark — shared by the viewer and catalog pages */
+.brand-mark {
+  height: 20px;
+  width: auto;
+  display: block;
+  flex-shrink: 0;
+}
+
+/* Light/dark toggle — a simple icon button, styling shared across pages */
+.theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.theme-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.theme-toggle svg {
+  width: 15px;
+  height: 15px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
