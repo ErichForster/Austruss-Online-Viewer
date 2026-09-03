@@ -141,9 +141,9 @@ searchEl.addEventListener("input", applyFilter);
 async function init() {
   const config = await loadDriveConfig().catch(() => null);
   if (!config || !isDriveConfigured(config)) {
-    bodyEl.innerHTML = `<div class="catalog-state error">Google Drive isn't configured yet.
+    bodyEl.innerHTML = `<div class="catalog-state error">The Drive backend isn't configured yet.
 
-Edit public/drive-config.json with a restricted Drive API key and your public folder's ID — see README.md "Google Drive setup" for the exact steps.</div>`;
+Edit public/drive-config.json with your Apps Script deployment URL and your Drive folder's ID — see README.md "Google Drive setup" for the exact steps.</div>`;
     return;
   }
 
@@ -167,14 +167,14 @@ Edit public/drive-config.json with a restricted Drive API key and your public fo
       .filter((e): e is Entry => e !== null);
 
     if (!allEntries.length) {
-      bodyEl.innerHTML = `<p class="catalog-state">No .ifc files found in the configured Drive folder (or none match the naming convention).</p>`;
+      bodyEl.innerHTML = `<p class="catalog-state">No .ifc or .frag files found in the configured Drive folder (or none match the naming convention).</p>`;
       return;
     }
     render(allEntries);
   } catch (err) {
     bodyEl.innerHTML = `<div class="catalog-state error">Couldn't load the catalog: ${escapeHtml(err instanceof Error ? err.message : String(err))}
 
-Check that the Drive folder is shared as "Anyone with the link", and that the API key in src/drive-config.ts is valid and has the Drive API enabled.</div>`;
+Check that the Apps Script deployment in public/drive-config.json is live (its access setting must be "Anyone"), and that the folder ID is correct.</div>`;
   }
 }
 
