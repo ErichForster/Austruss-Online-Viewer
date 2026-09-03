@@ -119,6 +119,30 @@ button {
   flex-shrink: 0;
 }
 
+/* Cross-page nav link (viewer <-> catalog) — shared styling, both pages
+   build their own <a> with this class since the pages don't share JS. */
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+
+.nav-link:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.nav-link svg {
+  width: 14px;
+  height: 14px;
+}
+
 /* Light/dark toggle — a simple icon button, styling shared across pages */
 .theme-toggle {
   display: flex;

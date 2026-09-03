@@ -30,6 +30,7 @@ app.innerHTML = `
   <div class="shell">
     <header class="topbar">
       <div class="wordmark"><img class="brand-mark" src="${import.meta.env.BASE_URL}brand/austruss-icon.png" alt="Austruss" />Austruss Online Viewer</div>
+      <a class="nav-link" href="${import.meta.env.BASE_URL}catalog.html" title="Browse saved models">${icon.showAll}Browse models</a>
       <span class="filename" id="filename"></span>
       <div class="toolbar">
         <button class="tool-btn" id="btn-fit" title="Fit view" disabled>${icon.fit}Fit</button>

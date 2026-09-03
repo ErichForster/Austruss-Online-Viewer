@@ -2,6 +2,10 @@ import "./catalog.css";
 import { listIfcFiles, loadDriveConfig, isDriveConfigured, type DriveFile } from "./drive";
 import { parseModelFilename, type ParsedModelName } from "./naming";
 
+// Duplicated from icons.ts rather than imported — see the note further
+// down about why main.ts and catalog.ts don't share modules.
+const BEAM_ICON = `<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 34V14h6v9h20v-9h6v20h-6v-9H14v9z"/></svg>`;
+
 // Duplicated from icons.ts rather than imported — icons.ts is otherwise
 // only used by main.ts, and importing it here would link this page's
 // chunk to the viewer's, the same bundling issue fixed for drive-config.ts.
@@ -23,6 +27,7 @@ app.innerHTML = `
   <div class="catalog-shell">
     <header class="catalog-topbar">
       <div class="wordmark"><img class="brand-mark" src="${import.meta.env.BASE_URL}brand/austruss-icon.png" alt="Austruss" />Austruss Online Viewer</div>
+      <a class="nav-link" href="${import.meta.env.BASE_URL}index.html" title="Open the viewer">${BEAM_ICON}Open viewer</a>
       <input class="catalog-search" id="search" type="text" placeholder="Search job, project, zone…" />
       <span class="catalog-count" id="count"></span>
       <button class="theme-toggle" id="theme-toggle" title="Toggle light/dark theme"></button>
