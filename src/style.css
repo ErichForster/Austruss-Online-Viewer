@@ -72,6 +72,10 @@ html,
 body {
   margin: 0;
   height: 100%;
+  /* Progressive enhancement for mobile browsers whose address bar resizes
+     the viewport — falls back to the 100% above on browsers that don't
+     understand dvh (unsupported values are ignored, not applied). */
+  height: 100dvh;
   background: var(--bg-void);
   color: var(--text-primary);
   font-family: var(--font-ui);
@@ -116,6 +120,19 @@ button {
   height: 20px;
   width: auto;
   display: block;
+  flex-shrink: 0;
+}
+
+/* Header wordmark — shared by both pages (was viewer-only before, which
+   meant the catalog page's version had no explicit styling at all). */
+.wordmark {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
   flex-shrink: 0;
 }
 
@@ -174,5 +191,17 @@ button {
   *::after {
     animation-duration: 0.001ms !important;
     transition-duration: 0.001ms !important;
+  }
+}
+
+/* ---------- Shared mobile layout (≤768px), both pages ---------- */
+@media (max-width: 768px) {
+  .wordmark-text,
+  .nav-link-text {
+    display: none;
+  }
+
+  .nav-link {
+    padding: 4px 6px;
   }
 }

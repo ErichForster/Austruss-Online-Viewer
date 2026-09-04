@@ -47,22 +47,56 @@ unless you're testing a Pages-path build locally
 ## What's here
 
 - **Fit view, set pivot, viewport background** — toolbar controls for
-  camera framing and viewport appearance
+  camera framing and viewport appearance, including uploading a custom
+  background image (remembered across visits, up to 3MB)
+- **Locations** — save the current pivot point under a name and recall it
+  later; saved per model (by filename) in the browser's local storage, so
+  they're specific to this device and this model file, not shared via
+  Drive
 - **Spatial tree** (left panel) — click any node to select and zoom the
   corresponding element; category badges show the IFC entity type
 - **Properties panel** (right) — attributes plus property sets
   (`IsDefinedBy` → `HasProperties`) for whatever's selected
+- **Selection info pin** — selecting an element (canvas click or tree)
+  shows a small pin with its Name and Frame name, anchored to the
+  element's actual center and following the camera as you orbit
 - **Isolate / show all** — hide everything except the current selection,
   or reset visibility
-- **Opening a new file replaces the current model** rather than adding a
-  second one into the same scene — the tree, properties, and isolate all
-  assume a single active model at a time
-- **Save locally / Save to Drive** — export the loaded model to the
+- **Multi-model overlay** — "Open IFC" replaces whatever's loaded, as
+  before. A "+" button in the model tree's header adds another model
+  alongside it instead (e.g. overlaying a services model over a
+  structural one) — either by uploading a file, or by browsing and
+  picking one straight from the configured Drive folder without leaving
+  the viewer. The spatial tree shows one collapsible group per loaded
+  model, each with its own close button to unload just that model.
+  Selecting an element makes its model the "active" one for Save/
+  Locations, so those act on whatever you're actually working with
+- **Sessions** — a bookmark button next to "+" saves the current set of
+  loaded models under a name, for recalling the same overlay setup
+  later without re-adding each one by hand. Only models that were loaded
+  *from Drive* can be included (a locally-uploaded file has no stable
+  reference to fetch again later) — saving warns you if some loaded
+  models got left out for this reason. Sessions live in the browser's
+  local storage, same as Locations — device/browser-specific, not synced
+- **Save locally / Save to Drive** — export the loaded model(s) to the
   compact `.frag` format, either as a browser download (for testing) or
-  uploaded to the shared Drive folder (see "Enabling save" below)
+  uploaded to the shared Drive folder. With more than one model loaded,
+  Save to Drive saves each one separately under its own existing name
+  rather than merging them (see "Enabling save" below)
 - Light/dark theme toggle, persisted across visits
 - Both side panels collapse via the small toggle buttons in the viewport
   gutters
+- **Mobile layout** (≤768px) — the side panels become full-screen overlays
+  (hidden by default, opened via the same gutter toggles, each with its
+  own close button since the toggle that opened it gets covered once the
+  overlay is up), the toolbar condenses to Fit / Isolate / Show all /
+  Open IFC / theme toggle, and the header logo and nav link shrink to
+  icon-only. Touch orbit/pan/zoom comes from `camera-controls`' own
+  defaults (one-finger orbit, two-finger pinch-zoom + pan) — verified
+  against its source rather than assumed, and `touch-action: none` is set
+  on the canvas so the browser doesn't intercept those gestures as page
+  scroll/zoom instead. The catalog page's header wraps onto multiple
+  rows at narrow widths rather than needing separate mobile markup
 
 ## What's not here yet
 
@@ -71,8 +105,8 @@ so the first version stays reviewable:
 
 - Section/clipping planes and measurement tools (ThatOpen ships components
   for both — `ClipEdges`/`Clipper` and the `LengthMeasurement` /
-  `AreaMeasurement` components — they just aren't wired into the UI yet)
-- Multi-model federation (loading and layering several IFCs together)
+  `AreaMeasurement` components — a clip plane was tried and pulled back
+  out again; neither is wired into the UI at the moment)
 - Saved views, markups, sharing links — these would need a backend
 - Search/filter within the spatial tree
 - Category-based visibility toggles (walls off, structure only, etc.)
@@ -135,6 +169,21 @@ that comes from `public/projects.json` instead — a small job-number →
 project-name lookup you maintain separately, since that mapping rarely
 changes once a job number exists. Any job number not listed there falls
 back to showing as "Job `<number>`" in the catalog.
+
+Each entry can be a plain string (just the name — treated as active), or
+an object with a `status`:
+```json
+{
+  "25177": "Lennox Head",
+  "24098": { "name": "Old Job", "status": "complete" }
+}
+```
+A `"complete"` job is hidden from the catalog's default view (collapsible
+project groups, click the header to expand/collapse) but stays fully
+searchable — typing anything into the search box, or ticking "Show
+completed", brings it back. There's no in-app way to change a project's
+status; it's set by editing this file and pushing, same as adding a new
+job number.
 
 Files that don't match the pattern at all are silently skipped by the
 catalog (they won't crash it, they just won't show up) — worth checking

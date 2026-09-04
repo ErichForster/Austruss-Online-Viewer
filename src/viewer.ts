@@ -20,9 +20,9 @@ export type Theme = "dark" | "light";
 // across both (see setPivotFromClick / highlighter setup below) — it reads
 // fine against either background, and Highlighter's style objects aren't
 // guaranteed to propagate live color changes to already-applied materials.
-const THEME_SCENE: Record<Theme, { background: string; grid: string }> = {
-  dark: { background: "#0e0101", grid: "#2e1414" },
-  light: { background: "#f7f5f3", grid: "#ddd5d0" },
+const THEME_SCENE: Record<Theme, { background: string }> = {
+  dark: { background: "#0e0101" },
+  light: { background: "#f7f5f3" },
 };
 
 export class IfcViewer {
@@ -35,6 +35,7 @@ export class IfcViewer {
   private container: HTMLElement;
   private currentTheme: Theme = "dark";
   private explicitBackground: string | null = null;
+  private backgroundTexture: THREE.Texture | null = null;
 
   onSelect: ((info: SelectionInfo | null) => void) | null = null;
 
@@ -69,10 +70,6 @@ export class IfcViewer {
         position: new THREE.Vector3(30, 40, 20),
       },
     });
-
-    const grids = this.components.get(OBC.Grids);
-    const grid = grids.create(this.world);
-    grid.config.color = new THREE.Color(palette.grid);
 
     await this.world.camera.controls.setLookAt(38, 28, 38, 0, 0, 0);
 
@@ -120,6 +117,7 @@ export class IfcViewer {
         renderedFaces: 0,
       },
     });
+
     this.highlighter.events.select.onHighlight.add((modelIdMap) => {
       const modelId = Object.keys(modelIdMap)[0];
       const localId = modelId ? [...modelIdMap[modelId]][0] : undefined;
@@ -174,6 +172,7 @@ export class IfcViewer {
     // actual 3D meshes from the parsed data).
     console.log(`[loadIfc] ${elapsed()} — ifcLoader.load() resolved (mesh build done)`);
 
+    await this.alignModelCoordination(model);
     this.world.scene.three.add(model.object);
     const t1 = performance.now();
     await this.fragments.core.update(true);
@@ -215,18 +214,27 @@ export class IfcViewer {
     await this.fragments.core.update(true);
   }
 
+  // Removes a single model, leaving any others loaded alongside it intact
+  // — used to unload one layer of a multi-model overlay rather than
+  // resetting the whole scene.
+  async unloadModel(modelId: string) {
+    await this.fragments.core.disposeModel(modelId);
+    await this.fragments.core.update(true);
+  }
+
+  get loadedModelIds(): string[] {
+    return [...this.fragments.list.keys()];
+  }
+
   // Applies a theme's background + grid color. Skipped for background if
   // an explicit override is active (see setBackground) — theme switches
   // shouldn't clobber a background the user picked deliberately.
   applyTheme(theme: Theme) {
     this.currentTheme = theme;
     const palette = THEME_SCENE[theme];
-    if (!this.explicitBackground) {
+    if (!this.explicitBackground && !this.backgroundTexture) {
       this.world.scene.three.background = new THREE.Color(palette.background);
     }
-    const grids = this.components.get(OBC.Grids);
-    const grid = grids.list.get(this.world.uuid);
-    if (grid) grid.config.color = new THREE.Color(palette.grid);
   }
 
   // Explicit viewport background override, independent of the light/dark
@@ -234,12 +242,36 @@ export class IfcViewer {
   // white for screenshots. Pass null to go back to following the theme.
   setBackground(color: string | null) {
     this.explicitBackground = color;
+    this.disposeBackgroundTexture();
     const resolved = color ?? THEME_SCENE[this.currentTheme].background;
     this.world.scene.three.background = new THREE.Color(resolved);
   }
 
   get background(): string | null {
     return this.explicitBackground;
+  }
+
+  // Loads an image as the viewport background. Takes precedence over both
+  // the theme's default and any solid-color override until cleared (via
+  // setBackground) — the two are mutually exclusive, one texture at a time.
+  async setBackgroundImage(source: File | Blob | string): Promise<void> {
+    const url = typeof source === "string" ? source : URL.createObjectURL(source);
+    try {
+      const texture = await new THREE.TextureLoader().loadAsync(url);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      this.disposeBackgroundTexture();
+      this.backgroundTexture = texture;
+      this.world.scene.three.background = texture;
+    } finally {
+      if (typeof source !== "string") URL.revokeObjectURL(url);
+    }
+  }
+
+  private disposeBackgroundTexture() {
+    if (this.backgroundTexture) {
+      this.backgroundTexture.dispose();
+      this.backgroundTexture = null;
+    }
   }
 
   // Raycasts from the current mouse position against the loaded model and
@@ -256,6 +288,32 @@ export class IfcViewer {
     return true;
   }
 
+  // Current orbit target — used to snapshot "wherever Set Pivot last
+  // placed it" as a named location, without requiring a fresh click.
+  getCurrentPivot(): { x: number; y: number; z: number } {
+    const target = this.world.camera.controls.getTarget(new THREE.Vector3(), true);
+    return { x: target.x, y: target.y, z: target.z };
+  }
+
+  goToPivot(point: { x: number; y: number; z: number }, animate = true) {
+    this.world.camera.controls.setTarget(point.x, point.y, point.z, animate);
+  }
+
+  // Projects a world-space point to CSS pixel coordinates relative to the
+  // viewport container — used to position the selection info pin over
+  // whatever's currently selected. Returns null if the point is behind the
+  // camera (nothing sensible to draw at).
+  worldToScreen(point: { x: number; y: number; z: number }): { left: number; top: number } | null {
+    const vector = new THREE.Vector3(point.x, point.y, point.z);
+    vector.project(this.world.camera.three);
+    if (vector.z > 1) return null;
+    const rect = this.container.getBoundingClientRect();
+    return {
+      left: ((vector.x + 1) / 2) * rect.width,
+      top: ((1 - vector.y) / 2) * rect.height,
+    };
+  }
+
   async loadFragments(
     buffer: Uint8Array,
     name: string,
@@ -270,9 +328,25 @@ export class IfcViewer {
       modelId: name,
       onProgress,
     });
+    await this.alignModelCoordination(model);
     this.world.scene.three.add(model.object);
     await this.fragments.core.update(true);
     return model;
+  }
+
+  // web-ifc's COORDINATE_TO_ORIGIN recenters each IFC file independently
+  // to its own local origin — fine for a single model, but it means two
+  // separately-loaded models don't land in the same shared space even if
+  // they were exported from the same coordinated project. The first model
+  // loaded establishes the shared "base" coordination system
+  // (FragmentsManager tracks this automatically); every model after that
+  // needs to be explicitly repositioned onto that base, which is what
+  // this does. Confirmed against the library's own applyBaseCoordinateSystem
+  // — it's exposed but not called automatically in the installed version.
+  private async alignModelCoordination(model: FRAGS.FragmentsModel) {
+    if (this.fragments.list.size <= 1) return; // this model established the base
+    const matrix = await model.getCoordinationMatrix();
+    this.fragments.applyBaseCoordinateSystem(model.object, matrix);
   }
 
   // Exports a loaded model back to the compact Fragments binary format —
@@ -321,6 +395,19 @@ export class IfcViewer {
       },
     });
     return data ?? null;
+  }
+
+  // Center of an item's bounding box — used to anchor the selection info
+  // pin at the element itself rather than wherever it happened to be
+  // clicked, and works regardless of whether the selection came from a
+  // canvas click or the spatial tree.
+  async getItemCenter(modelId: string, localId: number): Promise<{ x: number; y: number; z: number } | null> {
+    const model = this.fragments.list.get(modelId);
+    if (!model) return null;
+    const [box] = await model.getBoxes([localId]);
+    if (!box || box.isEmpty()) return null;
+    const center = box.getCenter(new THREE.Vector3());
+    return { x: center.x, y: center.y, z: center.z };
   }
 
   async selectByLocalId(modelId: string, localId: number) {

@@ -5,6 +5,10 @@ export interface TreeSelectHandler {
   (modelId: string, localId: number): void;
 }
 
+export interface TreeRemoveHandler {
+  (modelId: string): void;
+}
+
 const CATEGORIES_OPEN_BY_DEFAULT = new Set([
   "IFCPROJECT",
   "IFCSITE",
@@ -22,31 +26,79 @@ function labelFor(node: SpatialTreeItem): string {
   return cat || "Item";
 }
 
+// Renders the spatial tree as one collapsible group per loaded model,
+// rather than assuming a single active model — each group carries its own
+// filename label and a close button to unload just that model.
 export class SpatialTree {
   private root: HTMLElement;
   private onSelect: TreeSelectHandler;
+  private onRemove: TreeRemoveHandler;
   private selectedKey: string | null = null;
   private rowsByKey = new Map<string, HTMLElement>();
+  private groupsByModelId = new Map<string, HTMLElement>();
 
-  constructor(root: HTMLElement, onSelect: TreeSelectHandler) {
+  constructor(root: HTMLElement, onSelect: TreeSelectHandler, onRemove: TreeRemoveHandler) {
     this.root = root;
     this.onSelect = onSelect;
+    this.onRemove = onRemove;
   }
 
   clear() {
-    this.root.innerHTML = `<div class="tree-empty">Load an IFC model to see its spatial structure.</div>`;
+    this.root.innerHTML = `<div class="tree-empty">Load a model to see its spatial structure.</div>`;
     this.rowsByKey.clear();
+    this.groupsByModelId.clear();
     this.selectedKey = null;
   }
 
-  render(modelId: string, node: SpatialTreeItem) {
-    this.root.innerHTML = "";
-    this.rowsByKey.clear();
-    const list = document.createElement("div");
-    // Skip the synthetic root IFCPROJECT wrapper if it has exactly one child
-    // — most models only have one site/building and it reads cleaner flat.
-    this.renderNode(list, modelId, node, 0);
-    this.root.appendChild(list);
+  get modelCount(): number {
+    return this.groupsByModelId.size;
+  }
+
+  // Adds a new model group. If this is the first model, clears the empty
+  // state first. Does not touch any other already-rendered model group.
+  addModel(modelId: string, label: string, node: SpatialTreeItem) {
+    if (this.groupsByModelId.size === 0) {
+      this.root.innerHTML = "";
+    }
+
+    const group = document.createElement("div");
+    group.className = "tree-model-group";
+
+    const header = document.createElement("div");
+    header.className = "tree-model-header";
+    header.innerHTML = `
+      <span class="tree-model-icon">${icon.beam}</span>
+      <span class="tree-model-label" title="${label.replace(/"/g, "&quot;")}">${label}</span>
+      <button class="tree-model-remove" title="Unload this model">${icon.trash}</button>
+    `;
+    header.querySelector(".tree-model-remove")!.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.onRemove(modelId);
+    });
+    group.appendChild(header);
+
+    const body = document.createElement("div");
+    body.className = "tree-model-body";
+    this.renderNode(body, modelId, node, 0);
+    group.appendChild(body);
+
+    this.root.appendChild(group);
+    this.groupsByModelId.set(modelId, group);
+  }
+
+  // Removes one model's group and prunes its rows from the selection map.
+  // Restores the empty state if that was the last model.
+  removeModel(modelId: string) {
+    const group = this.groupsByModelId.get(modelId);
+    if (group) {
+      group.remove();
+      this.groupsByModelId.delete(modelId);
+    }
+    for (const key of [...this.rowsByKey.keys()]) {
+      if (key.startsWith(`${modelId}:`)) this.rowsByKey.delete(key);
+    }
+    if (this.selectedKey?.startsWith(`${modelId}:`)) this.selectedKey = null;
+    if (this.groupsByModelId.size === 0) this.clear();
   }
 
   private renderNode(

@@ -11,6 +11,7 @@ const BEAM_ICON = `<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" st
 // chunk to the viewer's, the same bundling issue fixed for drive-config.ts.
 const SUN_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8 6 18M18 6l1.8-1.8"/></svg>`;
 const MOON_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5Z"/></svg>`;
+const CHEVRON_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>`;
 
 // Theme: read + apply before first paint to avoid a flash of the wrong theme.
 const THEME_KEY = "setout-theme";
@@ -26,9 +27,13 @@ const app = document.getElementById("app")!;
 app.innerHTML = `
   <div class="catalog-shell">
     <header class="catalog-topbar">
-      <div class="wordmark"><img class="brand-mark" src="${import.meta.env.BASE_URL}brand/austruss-icon.png" alt="Austruss" />Austruss Online Viewer</div>
-      <a class="nav-link" href="${import.meta.env.BASE_URL}index.html" title="Open the viewer">${BEAM_ICON}Open viewer</a>
+      <div class="wordmark"><img class="brand-mark" src="${import.meta.env.BASE_URL}brand/austruss-icon.png" alt="Austruss" /><span class="wordmark-text">Austruss Online Viewer</span></div>
+      <a class="nav-link" href="${import.meta.env.BASE_URL}index.html" title="Open the viewer">${BEAM_ICON}<span class="nav-link-text">Open viewer</span></a>
       <input class="catalog-search" id="search" type="text" placeholder="Search job, project, zone…" />
+      <label class="show-completed-toggle" id="show-completed-wrap">
+        <input type="checkbox" id="show-completed" />
+        Show completed
+      </label>
       <span class="catalog-count" id="count"></span>
       <button class="theme-toggle" id="theme-toggle" title="Toggle light/dark theme"></button>
     </header>
@@ -54,52 +59,79 @@ themeToggleBtn.addEventListener("click", () => {
 const bodyEl = document.getElementById("body")!;
 const searchEl = document.getElementById("search") as HTMLInputElement;
 const countEl = document.getElementById("count")!;
+const showCompletedEl = document.getElementById("show-completed") as HTMLInputElement;
+
+type ProjectStatus = "active" | "complete";
 
 interface Entry {
   parsed: ParsedModelName;
   file: DriveFile;
   projectName: string;
+  jobStatus: ProjectStatus;
 }
 
 let allEntries: Entry[] = [];
+// Persists which project groups are collapsed across re-renders (e.g. while
+// typing a search) — otherwise every filter change would silently re-expand
+// everything, undoing whatever the person just collapsed.
+const collapsedJobs = new Set<string>();
 
 function escapeHtml(input: string): string {
   return input.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 function render(entries: Entry[]) {
-  countEl.textContent = `${entries.length} model${entries.length === 1 ? "" : "s"}`;
+  const showCompleted = showCompletedEl.checked;
+  const searching = searchEl.value.trim().length > 0;
+  // Completed projects are hidden from the default browse view but still
+  // fully searchable — a non-empty search always includes them regardless
+  // of the "Show completed" checkbox.
+  const visible = entries.filter((e) => e.jobStatus === "active" || showCompleted || searching);
 
-  if (!entries.length) {
+  countEl.textContent = `${visible.length} model${visible.length === 1 ? "" : "s"}`;
+
+  if (!visible.length) {
     bodyEl.innerHTML = `<p class="catalog-state">No models match.</p>`;
     return;
   }
 
   // Group: project name → job number → zone
-  const byProject = new Map<string, Map<string, Map<string, Entry[]>>>();
-  for (const entry of entries) {
+  const byProject = new Map<string, Map<string, { status: ProjectStatus; zones: Map<string, Entry[]> }>>();
+  for (const entry of visible) {
     const { jobNumber, zone } = entry.parsed;
     if (!byProject.has(entry.projectName)) byProject.set(entry.projectName, new Map());
     const byJob = byProject.get(entry.projectName)!;
-    if (!byJob.has(jobNumber)) byJob.set(jobNumber, new Map());
-    const byZone = byJob.get(jobNumber)!;
-    if (!byZone.has(zone)) byZone.set(zone, []);
-    byZone.get(zone)!.push(entry);
+    if (!byJob.has(jobNumber)) byJob.set(jobNumber, { status: entry.jobStatus, zones: new Map() });
+    const jobEntry = byJob.get(jobNumber)!;
+    if (!jobEntry.zones.has(zone)) jobEntry.zones.set(zone, []);
+    jobEntry.zones.get(zone)!.push(entry);
   }
 
   const sortedProjects = [...byProject.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 
   bodyEl.innerHTML = "";
   for (const [projectName, byJob] of sortedProjects) {
-    for (const [jobNumber, byZone] of [...byJob.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    for (const [jobNumber, { status, zones }] of [...byJob.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
       const group = document.createElement("section");
       group.className = "project-group";
-      group.innerHTML = `
-        <h2 class="project-title">${escapeHtml(projectName)}</h2>
-        <div class="project-job">Job ${escapeHtml(jobNumber)}</div>
-      `;
+      const collapsed = collapsedJobs.has(jobNumber);
 
-      for (const [zone, zoneEntries] of [...byZone.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+      const header = document.createElement("div");
+      header.className = "project-header";
+      header.innerHTML = `
+        <span class="project-caret${collapsed ? "" : " open"}">${CHEVRON_ICON}</span>
+        <div class="project-header-text">
+          <h2 class="project-title">${escapeHtml(projectName)}${status === "complete" ? '<span class="project-status-pill">Complete</span>' : ""}</h2>
+          <div class="project-job">Job ${escapeHtml(jobNumber)}</div>
+        </div>
+      `;
+      group.appendChild(header);
+
+      const content = document.createElement("div");
+      content.className = "project-content";
+      content.style.display = collapsed ? "none" : "block";
+
+      for (const [zone, zoneEntries] of [...zones.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
         const zoneEl = document.createElement("div");
         zoneEl.className = "zone-group";
         zoneEl.innerHTML = `<div class="zone-head"><span class="zone-badge">ZONE</span>${escapeHtml(zone)}</div>`;
@@ -116,8 +148,18 @@ function render(entries: Entry[]) {
           `;
           zoneEl.appendChild(row);
         }
-        group.appendChild(zoneEl);
+        content.appendChild(zoneEl);
       }
+      group.appendChild(content);
+
+      header.addEventListener("click", () => {
+        const nowCollapsed = content.style.display !== "none";
+        content.style.display = nowCollapsed ? "none" : "block";
+        header.querySelector(".project-caret")!.classList.toggle("open", !nowCollapsed);
+        if (nowCollapsed) collapsedJobs.add(jobNumber);
+        else collapsedJobs.delete(jobNumber);
+      });
+
       bodyEl.appendChild(group);
     }
   }
@@ -137,6 +179,7 @@ function applyFilter() {
 }
 
 searchEl.addEventListener("input", applyFilter);
+showCompletedEl.addEventListener("change", applyFilter);
 
 async function init() {
   const config = await loadDriveConfig().catch(() => null);
@@ -147,7 +190,10 @@ Edit public/drive-config.json with your Apps Script deployment URL and your Driv
     return;
   }
 
-  let projects: Record<string, string> = {};
+  // projects.json entries can be either a plain string (legacy — just a
+  // name, treated as active) or {name, status}, so existing simple entries
+  // keep working without editing every line to adopt the status field.
+  let projects: Record<string, string | { name: string; status?: ProjectStatus }> = {};
   try {
     const res = await fetch(`${import.meta.env.BASE_URL}projects.json`);
     if (res.ok) projects = await res.json();
@@ -161,8 +207,10 @@ Edit public/drive-config.json with your Apps Script deployment URL and your Driv
       .map((file) => {
         const parsed = parseModelFilename(file.name);
         if (!parsed) return null;
-        const projectName = projects[parsed.jobNumber] ?? `Job ${parsed.jobNumber}`;
-        return { parsed, file, projectName };
+        const entry = projects[parsed.jobNumber];
+        const projectName = (typeof entry === "string" ? entry : entry?.name) ?? `Job ${parsed.jobNumber}`;
+        const jobStatus: ProjectStatus = (typeof entry === "object" && entry?.status === "complete") ? "complete" : "active";
+        return { parsed, file, projectName, jobStatus };
       })
       .filter((e): e is Entry => e !== null);
 
