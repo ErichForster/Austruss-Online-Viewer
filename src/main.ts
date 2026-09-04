@@ -80,10 +80,20 @@ app.innerHTML = `
             <div class="save-picker-body">
               <label class="save-picker-label">File name</label>
               <input type="text" id="save-filename" class="save-filename-input" />
+              <div class="save-naming-fields" id="save-naming-fields" hidden>
+                <p class="save-naming-hint">That name doesn't match the required format (Job-Product-Zone-Drawing) — the catalog won't be able to find it. Fill these in and hit Save again:</p>
+                <div class="save-naming-row">
+                  <input type="text" id="save-job" placeholder="Job #" class="save-naming-input" />
+                  <input type="text" id="save-product" placeholder="Product" class="save-naming-input" value="LGS" />
+                  <input type="text" id="save-zone" placeholder="Zone" class="save-naming-input" />
+                  <input type="text" id="save-drawing" placeholder="Drawing #" class="save-naming-input" />
+                </div>
+              </div>
               <div class="save-picker-actions">
                 <button class="tool-btn" id="save-cancel">Cancel</button>
                 <button class="upload-btn" id="save-confirm">${icon.cloudSave}Save</button>
               </div>
+              <div class="save-result" id="save-result" hidden></div>
             </div>
           </div>
         </div>
@@ -201,6 +211,12 @@ const btnSave = $<HTMLButtonElement>("btn-save");
 const btnSaveLocal = $<HTMLButtonElement>("btn-save-local");
 const savePicker = $("save-picker");
 const saveFilenameInput = $<HTMLInputElement>("save-filename");
+const saveNamingFields = $("save-naming-fields");
+const saveJobInput = $<HTMLInputElement>("save-job");
+const saveProductInput = $<HTMLInputElement>("save-product");
+const saveZoneInput = $<HTMLInputElement>("save-zone");
+const saveDrawingInput = $<HTMLInputElement>("save-drawing");
+const saveResultEl = $("save-result");
 const saveCancelBtn = $<HTMLButtonElement>("save-cancel");
 const saveConfirmBtn = $<HTMLButtonElement>("save-confirm");
 const themeToggleBtn = $<HTMLButtonElement>("theme-toggle");
@@ -573,10 +589,26 @@ addModelInput.addEventListener("change", () => {
 const btnAddModelTree = $<HTMLButtonElement>("btn-add-model-tree");
 const treeAddMenu = $("tree-add-menu");
 const btnBrowseDrive = $<HTMLButtonElement>("btn-browse-drive");
+// Positions a popover that's switched to position:fixed (see the CSS
+// comment on .tree-add-menu / .sessions-picker) using the trigger button's
+// actual screen position, since escaping the panel's overflow:hidden this
+// way means it can no longer rely on CSS top/right relative to a
+// (clipped) ancestor.
+function positionFixedPopover(popover: HTMLElement, trigger: HTMLElement) {
+  const rect = trigger.getBoundingClientRect();
+  const width = popover.offsetWidth || 260;
+  let left = rect.right - width;
+  left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
+  popover.style.top = `${rect.bottom + 6}px`;
+  popover.style.left = `${left}px`;
+}
+
 btnAddModelTree.addEventListener("click", (e) => {
   e.stopPropagation();
   sessionsPicker.hidden = true;
+  const willOpen = treeAddMenu.hidden;
   treeAddMenu.hidden = !treeAddMenu.hidden;
+  if (willOpen) positionFixedPopover(treeAddMenu, btnAddModelTree);
 });
 treeAddMenu.addEventListener("click", (e) => {
   // The "Upload file" item is a <label for="add-model-input"> — let its
@@ -651,7 +683,10 @@ btnSessions.addEventListener("click", (e) => {
   locationsPicker.hidden = true;
   treeAddMenu.hidden = true;
   sessionsPicker.hidden = !sessionsPicker.hidden;
-  if (!sessionsPicker.hidden) renderSessionsList();
+  if (!sessionsPicker.hidden) {
+    renderSessionsList();
+    positionFixedPopover(sessionsPicker, btnSessions);
+  }
 });
 sessionsPicker.addEventListener("click", (e) => e.stopPropagation());
 
@@ -1049,6 +1084,8 @@ btnSave.addEventListener("click", (e) => {
   // saveToDrive) rather than re-uploading the original .ifc bytes — pre-
   // fill the matching filename so the naming convention still parses.
   saveFilenameInput.value = currentFileName.replace(/\.(ifc|frag)$/i, "") + ".frag";
+  saveNamingFields.hidden = true;
+  saveResultEl.hidden = true;
   savePicker.hidden = !savePicker.hidden;
   if (!savePicker.hidden) saveFilenameInput.focus();
 });
@@ -1056,9 +1093,39 @@ savePicker.addEventListener("click", (e) => e.stopPropagation());
 saveCancelBtn.addEventListener("click", () => {
   savePicker.hidden = true;
 });
-saveConfirmBtn.addEventListener("click", () => {
-  savePicker.hidden = true;
-  saveToDrive(saveFilenameInput.value.trim());
+saveConfirmBtn.addEventListener("click", async () => {
+  const { parseModelFilename } = await import("./model-picker");
+  const typed = saveFilenameInput.value.trim();
+
+  if (!saveNamingFields.hidden) {
+    // Second click: the naming fields are already showing, meaning the
+    // typed name failed the check once already — build a compliant name
+    // from the fields instead of re-checking the (still non-matching)
+    // typed text.
+    const job = saveJobInput.value.trim();
+    const product = saveProductInput.value.trim();
+    const zone = saveZoneInput.value.trim();
+    const drawing = saveDrawingInput.value.trim();
+    if (!job || !product || !zone || !drawing) {
+      showError("Fill in all four fields — Job, Product, Zone, and Drawing # are all required.");
+      return;
+    }
+    const description = typed.replace(/\.(ifc|frag)$/i, "").replace(/[^a-zA-Z0-9]+/g, "_");
+    const finalName = `${job}-${product}-${zone}-${drawing}_${description}.frag`;
+    saveFilenameInput.value = finalName;
+    saveNamingFields.hidden = true;
+    saveToDrive(finalName);
+    return;
+  }
+
+  if (!parseModelFilename(typed)) {
+    saveNamingFields.hidden = false;
+    saveJobInput.focus();
+    return;
+  }
+
+  saveResultEl.hidden = true;
+  saveToDrive(typed);
 });
 saveFilenameInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") saveConfirmBtn.click();
@@ -1080,7 +1147,7 @@ function arrayBufferToBase64(bytes: Uint8Array): Promise<string> {
 // Core save: exports one model's compact Fragments buffer and uploads it.
 // Throws on failure — callers handle their own loading/error UI, since the
 // single-model and save-all-models flows want different messaging.
-async function saveModelToDrive(modelId: string, filename: string): Promise<void> {
+async function saveModelToDrive(modelId: string, filename: string): Promise<string> {
   if (!filename.toLowerCase().endsWith(".frag")) {
     throw new Error("File name must end in .frag");
   }
@@ -1116,31 +1183,50 @@ async function saveModelToDrive(modelId: string, filename: string): Promise<void
   const result = await res.json();
   if (!result.success) throw new Error(result.error || "Unknown error");
   loadedModels.set(modelId, filename);
+  return result.webViewLink as string;
 }
 
 async function saveToDrive(filename: string) {
   if (!currentModelId) return;
   startLoading(`Exporting ${filename}…`);
   try {
-    await saveModelToDrive(currentModelId, filename);
+    const link = await saveModelToDrive(currentModelId, filename);
     stopLoading();
     currentFileName = filename;
     updateFilenameDisplay();
+    showSaveResult(filename, link);
   } catch (err) {
     stopLoading();
     showError(err instanceof Error ? `Couldn't save to Drive: ${err.message}` : "Couldn't save to Drive.");
   }
 }
 
+function showSaveResult(filename: string, link: string) {
+  saveResultEl.hidden = false;
+  saveResultEl.innerHTML = `Saved <strong>${filename.replace(/</g, "&lt;")}</strong>. <a href="${link}" target="_blank" rel="noopener">Open share link ↗</a>`;
+  savePicker.hidden = false; // keep the popover open so the link is visible
+}
+
 // Multiple models loaded — save each one under its own existing name
 // (swapped to .frag) rather than the single-file rename flow, which
-// doesn't make sense for more than one model at a time.
+// doesn't make sense for more than one model at a time. Models whose name
+// doesn't match the naming convention are skipped rather than guessed at
+// — batch-saving isn't a good place to interactively prompt per model, so
+// those get flagged for saving individually instead, where the popover
+// can walk through the missing fields.
 async function saveAllModelsToDrive() {
+  const { parseModelFilename } = await import("./model-picker");
   const entries = [...loadedModels.entries()];
   let done = 0;
   const failures: string[] = [];
+  const skipped: string[] = [];
   for (const [modelId, name] of entries) {
     const filename = name.replace(/\.(ifc|frag)$/i, "") + ".frag";
+    if (!parseModelFilename(filename)) {
+      skipped.push(filename);
+      done++;
+      continue;
+    }
     startLoading(`Saving ${filename} to Drive… (${done + 1}/${entries.length})`);
     try {
       await saveModelToDrive(modelId, filename);
@@ -1151,8 +1237,12 @@ async function saveAllModelsToDrive() {
   }
   stopLoading();
   updateFilenameDisplay();
-  if (failures.length) {
-    showError(`Saved ${done - failures.length}/${entries.length} models. Failed: ${failures.join("; ")}`);
+  if (skipped.length) {
+    showError(
+      `Skipped ${skipped.length} model(s) that don't match the naming convention — save those individually instead: ${skipped.join(", ")}`,
+    );
+  } else if (failures.length) {
+    showError(`Saved ${entries.length - skipped.length - failures.length}/${entries.length - skipped.length} models. Failed: ${failures.join("; ")}`);
   }
 }
 
@@ -1207,33 +1297,47 @@ viewer.init(currentTheme).then(async () => {
 // index.html?fileId=<driveFileId>&name=<originalFilename>
 async function loadFromQueryParams() {
   const params = new URLSearchParams(location.search);
-  const fileId = params.get("fileId");
-  const name = params.get("name") ?? "model.ifc";
-  if (!fileId) return;
+  const fileIds = params.getAll("fileId");
+  const names = params.getAll("name");
+  if (!fileIds.length) return;
 
   const config = await getDriveConfig();
   dropzone.style.display = "none";
-  startLoading(`Fetching ${name} from Drive…`);
-  filenameEl.textContent = name;
 
-  try {
-    const url = `${config.scriptUrl}?action=download&fileId=${encodeURIComponent(fileId)}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Backend error (${res.status})`);
-    const data = await res.json();
-    if (!data.success) throw new Error(data.error || "Unknown error downloading file");
-    const bytes = base64ToBytes(data.contentBase64);
-    const loadedName = data.name || name;
-    await handleFile(new File([new Uint8Array(bytes)], loadedName));
-    modelDriveFileIds.set(loadedName, fileId);
-  } catch (err) {
-    console.error(err);
-    stopLoading();
+  for (let i = 0; i < fileIds.length; i++) {
+    const fileId = fileIds[i];
+    const fallbackName = names[i] ?? "model.ifc";
+    // First model replaces (the normal single-open case, or the first of
+    // a multi-select "open together"); every one after that adds
+    // alongside it, so a catalog multi-select opens as one overlay.
+    const mode: "replace" | "add" = i === 0 ? "replace" : "add";
+
+    startLoading(`Fetching ${fallbackName} from Drive… (${i + 1}/${fileIds.length})`);
+    try {
+      const url = `${config.scriptUrl}?action=download&fileId=${encodeURIComponent(fileId)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`Backend error (${res.status})`);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Unknown error downloading file");
+      const bytes = base64ToBytes(data.contentBase64);
+      const loadedName = data.name || fallbackName;
+      await handleFile(new File([new Uint8Array(bytes)], loadedName), mode);
+      modelDriveFileIds.set(loadedName, fileId);
+    } catch (err) {
+      console.error(err);
+      stopLoading();
+      showError(
+        err instanceof Error
+          ? `Couldn't load ${fallbackName} from Drive: ${err.message}`
+          : `Couldn't load ${fallbackName} from Drive.`,
+      );
+      // Keep going with the rest of the selection rather than abandoning
+      // the whole batch over one failed model.
+    }
+  }
+
+  if (loadedModels.size === 0) {
     dropzone.style.display = "flex";
-    filenameEl.textContent = "";
-    showError(
-      err instanceof Error ? `Couldn't load model from Drive: ${err.message}` : "Couldn't load model from Drive.",
-    );
   }
 }
 

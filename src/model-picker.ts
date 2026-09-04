@@ -20,7 +20,7 @@ export interface ParsedModelName {
 
 const PREFIX_PATTERN = /^(\d{3,6})-([A-Z]+)-([A-Z0-9]+)-(\d+)/;
 
-function parseModelFilename(filename: string): ParsedModelName | null {
+export function parseModelFilename(filename: string): ParsedModelName | null {
   const base = filename.replace(/\.(ifc|frag)$/i, "");
   const match = base.match(PREFIX_PATTERN);
   if (!match) return null;

@@ -210,9 +210,68 @@
   margin-top: 2px;
 }
 
+.save-naming-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.save-naming-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.save-naming-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 6px;
+}
+
+.save-naming-input {
+  height: 26px;
+  min-width: 0;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 11.5px;
+  padding: 0 6px;
+}
+
+.save-result {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.save-result a {
+  color: var(--accent-strong);
+}
+
 .locations-picker,
 .sessions-picker {
   width: 260px;
+}
+
+/* Overrides .bg-picker's position:absolute for this one specifically —
+   sessions-picker lives inside the tree panel, which has
+   overflow:hidden for its own scrolling and would otherwise clip a
+   260px popover that doesn't fit within the panel's own width. Position
+   set via JS (positionFixedPopover in main.ts). The other .bg-picker
+   variants (Background, Save to Drive, Locations) live in the toolbar,
+   not inside a clipped ancestor, so they don't need this. */
+.sessions-picker {
+  position: fixed;
+  top: auto;
+  right: auto;
+  z-index: 60;
 }
 
 .locations-save-row {
@@ -432,9 +491,13 @@
 }
 
 .tree-add-menu {
-  position: absolute;
-  top: 26px;
-  right: 0;
+  /* position:fixed (not absolute) deliberately — .panel has
+     overflow:hidden for its own scrolling, which would otherwise clip
+     this popover since it's wider than the panel itself. Position is
+     set via JS (positionFixedPopover in main.ts) rather than top/right,
+     since a fixed element's coordinates are relative to the viewport,
+     not this trigger button. */
+  position: fixed;
   display: none;
   flex-direction: column;
   min-width: 160px;
@@ -442,7 +505,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-  z-index: 20;
+  z-index: 60;
   padding: 4px;
 }
 

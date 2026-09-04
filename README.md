@@ -70,7 +70,10 @@ unless you're testing a Pages-path build locally
   the viewer. The spatial tree shows one collapsible group per loaded
   model, each with its own close button to unload just that model.
   Selecting an element makes its model the "active" one for Save/
-  Locations, so those act on whatever you're actually working with
+  Locations, so those act on whatever you're actually working with.
+  The catalog page also supports this directly — check the box on
+  several models and hit "Open together" to load them all as one
+  overlay in a single trip, instead of adding them one at a time
 - **Sessions** — a bookmark button next to "+" saves the current set of
   loaded models under a name, for recalling the same overlay setup
   later without re-adding each one by hand. Only models that were loaded
@@ -82,7 +85,12 @@ unless you're testing a Pages-path build locally
   compact `.frag` format, either as a browser download (for testing) or
   uploaded to the shared Drive folder. With more than one model loaded,
   Save to Drive saves each one separately under its own existing name
-  rather than merging them (see "Enabling save" below)
+  rather than merging them (see "Enabling save" below). If a filename
+  doesn't match the naming convention, Save to Drive prompts for the
+  missing Job/Product/Zone/Drawing pieces before saving, rather than
+  silently uploading something the catalog will never be able to find.
+  A successful single-model save shows the file's Drive share link
+  directly in the popover
 - Light/dark theme toggle, persisted across visits
 - Both side panels collapse via the small toggle buttons in the viewport
   gutters

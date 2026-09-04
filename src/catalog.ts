@@ -40,6 +40,11 @@ app.innerHTML = `
     <main class="catalog-body" id="body">
       <p class="catalog-state">Loading model catalog…</p>
     </main>
+    <div class="selection-bar" id="selection-bar" hidden>
+      <span id="selection-count"></span>
+      <button class="upload-btn" id="selection-open">Open together →</button>
+      <button class="tool-btn" id="selection-clear">Clear</button>
+    </div>
   </div>
 `;
 
@@ -75,6 +80,10 @@ let allEntries: Entry[] = [];
 // typing a search) — otherwise every filter change would silently re-expand
 // everything, undoing whatever the person just collapsed.
 const collapsedJobs = new Set<string>();
+// Models checked for opening together — keyed by Drive file ID so it
+// survives re-renders (e.g. while typing a search) the same way
+// collapsedJobs does.
+const selectedIds = new Map<string, Entry>();
 
 function escapeHtml(input: string): string {
   return input.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -137,15 +146,30 @@ function render(entries: Entry[]) {
         zoneEl.innerHTML = `<div class="zone-head"><span class="zone-badge">ZONE</span>${escapeHtml(zone)}</div>`;
 
         for (const entry of zoneEntries.sort((a, b) => a.parsed.drawingNumber.localeCompare(b.parsed.drawingNumber))) {
-          const row = document.createElement("a");
+          const row = document.createElement("div");
           row.className = "model-row";
-          row.href = `${import.meta.env.BASE_URL}index.html?fileId=${encodeURIComponent(entry.file.id)}&name=${encodeURIComponent(entry.file.name)}`;
-          row.innerHTML = `
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.className = "model-select";
+          checkbox.title = "Select for opening together";
+          checkbox.checked = selectedIds.has(entry.file.id);
+          checkbox.addEventListener("change", () => {
+            if (checkbox.checked) selectedIds.set(entry.file.id, entry);
+            else selectedIds.delete(entry.file.id);
+            updateSelectionBar();
+          });
+          row.appendChild(checkbox);
+
+          const link = document.createElement("a");
+          link.className = "model-row-link";
+          link.href = `${import.meta.env.BASE_URL}index.html?fileId=${encodeURIComponent(entry.file.id)}&name=${encodeURIComponent(entry.file.name)}`;
+          link.innerHTML = `
             <span class="model-drawing">${escapeHtml(entry.parsed.drawingNumber)}</span>
             <span class="model-desc">${escapeHtml(entry.parsed.description || entry.file.name)}</span>
             ${entry.parsed.revision ? `<span class="model-rev">Rev ${escapeHtml(entry.parsed.revision)}</span>` : ""}
             <span class="model-open">Open →</span>
           `;
+          row.appendChild(link);
           zoneEl.appendChild(row);
         }
         content.appendChild(zoneEl);
@@ -164,6 +188,30 @@ function render(entries: Entry[]) {
     }
   }
 }
+
+const selectionBar = document.getElementById("selection-bar")!;
+const selectionCountEl = document.getElementById("selection-count")!;
+const selectionOpenBtn = document.getElementById("selection-open") as HTMLButtonElement;
+const selectionClearBtn = document.getElementById("selection-clear") as HTMLButtonElement;
+
+function updateSelectionBar() {
+  const n = selectedIds.size;
+  selectionBar.hidden = n === 0;
+  selectionCountEl.textContent = `${n} model${n === 1 ? "" : "s"} selected`;
+}
+selectionOpenBtn.addEventListener("click", () => {
+  const url = new URL(`${location.origin}${import.meta.env.BASE_URL}index.html`);
+  for (const entry of selectedIds.values()) {
+    url.searchParams.append("fileId", entry.file.id);
+    url.searchParams.append("name", entry.file.name);
+  }
+  location.href = url.toString();
+});
+selectionClearBtn.addEventListener("click", () => {
+  selectedIds.clear();
+  updateSelectionBar();
+  applyFilter(); // re-render (respecting the current search) to uncheck every visible checkbox
+});
 
 function applyFilter() {
   const q = searchEl.value.trim().toLowerCase();
