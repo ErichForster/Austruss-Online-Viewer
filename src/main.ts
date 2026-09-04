@@ -44,7 +44,7 @@ app.innerHTML = `
           <button class="tool-btn" id="btn-locations" title="Save and recall named pivot points" disabled>${icon.mapPin}Locations</button>
           <div class="bg-picker locations-picker" id="locations-picker" hidden>
             <div class="save-picker-body">
-              <label class="save-picker-label">Save current pivot as</label>
+              <label class="save-picker-label" for="location-name-input">Save current pivot as</label>
               <div class="locations-save-row">
                 <input type="text" id="location-name-input" class="save-filename-input" placeholder="e.g. Stair core" />
                 <button class="upload-btn" id="location-save-btn">Save</button>
@@ -78,7 +78,7 @@ app.innerHTML = `
           <button class="tool-btn" id="btn-save" title="Save to the shared Drive folder — saves every loaded model separately if more than one is open" disabled>${icon.cloudSave}Save to Drive</button>
           <div class="bg-picker save-picker" id="save-picker" hidden>
             <div class="save-picker-body">
-              <label class="save-picker-label">File name</label>
+              <label class="save-picker-label" for="save-filename">File name</label>
               <input type="text" id="save-filename" class="save-filename-input" />
               <div class="save-naming-fields" id="save-naming-fields" hidden>
                 <p class="save-naming-hint">That name doesn't match the required format (Job-Product-Zone-Drawing) — the catalog won't be able to find it. Fill these in and hit Save again:</p>
@@ -109,7 +109,7 @@ app.innerHTML = `
               <button class="panel-add-btn" id="btn-sessions" title="Save or recall a set of models">${icon.bookmark}</button>
               <div class="bg-picker save-picker sessions-picker" id="sessions-picker" hidden>
                 <div class="save-picker-body">
-                  <label class="save-picker-label">Save current models as</label>
+                  <label class="save-picker-label" for="session-name-input">Save current models as</label>
                   <div class="locations-save-row">
                     <input type="text" id="session-name-input" class="save-filename-input" placeholder="e.g. Lennox Head — coordination" />
                     <button class="upload-btn" id="session-save-btn">Save</button>

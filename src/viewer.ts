@@ -211,6 +211,7 @@ export class IfcViewer {
     for (const id of ids) {
       await this.fragments.core.disposeModel(id);
     }
+    this.baseModelId = null;
     await this.fragments.core.update(true);
   }
 
@@ -338,15 +339,36 @@ export class IfcViewer {
   // to its own local origin — fine for a single model, but it means two
   // separately-loaded models don't land in the same shared space even if
   // they were exported from the same coordinated project. The first model
-  // loaded establishes the shared "base" coordination system
-  // (FragmentsManager tracks this automatically); every model after that
-  // needs to be explicitly repositioned onto that base, which is what
-  // this does. Confirmed against the library's own applyBaseCoordinateSystem
-  // — it's exposed but not called automatically in the installed version.
+  // loaded establishes the shared "base" coordination system; every model
+  // after that gets repositioned onto that base.
+  //
+  // This deliberately does NOT use the library's own
+  // FragmentsManager.applyBaseCoordinateSystem/baseCoordinationMatrix —
+  // those are populated by an async callback with no guaranteed timing
+  // relative to when the next model's alignment runs, which produced a
+  // real bug: a model loaded before that callback finished got aligned
+  // against a blank/identity matrix instead of the real one, landing it
+  // at a wrong (sometimes enormous) offset — which also explains models
+  // disappearing entirely, since fitView()'s bounding box would balloon
+  // to match. Fetching both matrices explicitly, myself, right here,
+  // removes the race condition entirely rather than working around it.
+  private baseModelId: string | null = null;
+
   private async alignModelCoordination(model: FRAGS.FragmentsModel) {
-    if (this.fragments.list.size <= 1) return; // this model established the base
-    const matrix = await model.getCoordinationMatrix();
-    this.fragments.applyBaseCoordinateSystem(model.object, matrix);
+    const baseModel = this.baseModelId ? this.fragments.list.get(this.baseModelId) : undefined;
+    if (!baseModel) {
+      // First model ever, or the previous base was since unloaded —
+      // either way, this model becomes the new reference; nothing to
+      // align it to yet.
+      this.baseModelId = model.modelId;
+      return;
+    }
+    const [baseMatrix, ownMatrix] = await Promise.all([
+      baseModel.getCoordinationMatrix(),
+      model.getCoordinationMatrix(),
+    ]);
+    const transform = new THREE.Matrix4().copy(ownMatrix).invert().multiply(baseMatrix);
+    model.object.applyMatrix4(transform);
   }
 
   // Exports a loaded model back to the compact Fragments binary format —
