@@ -3,7 +3,11 @@
 @import "./style.css";
 
 .catalog-shell {
-  min-height: 100%;
+  /* height (not min-height) — .catalog-body's overflow-y:auto only
+     actually scrolls if this shell is strictly bounded to the viewport;
+     min-height would let the whole shell grow past it instead, pushing
+     the overflow up to html/body where it can't scroll. */
+  height: 100%;
   display: flex;
   flex-direction: column;
 }
@@ -44,6 +48,13 @@
 
 .catalog-body {
   flex: 1;
+  /* The whole app has overflow:hidden on html/body (needed for the
+     viewer's fixed single-screen layout) — the catalog page, being a
+     plain scrollable list, needs its own internal scroll instead of
+     inheriting that, or content taller than the viewport is just
+     unreachable. Most noticeable on mobile (far less vertical space)
+     but not actually a mobile-only bug. */
+  overflow-y: auto;
   padding: 20px;
   max-width: 920px;
   width: 100%;
@@ -196,6 +207,10 @@
 }
 
 .model-select {
+  /* Multi-select temporarily disabled (see the open multi-model bug notes)
+     — hidden rather than removed so it's a one-line revert once that's
+     fixed, without ripping out the JS logic behind it. */
+  display: none;
   flex-shrink: 0;
   margin-left: 12px;
   cursor: pointer;

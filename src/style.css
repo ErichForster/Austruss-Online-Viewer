@@ -205,3 +205,12 @@ button {
     padding: 4px 6px;
   }
 }
+
+/* External viewer/catalog mode (?external=1) — a restricted view for
+   sharing with people outside Austruss. Applied as a class on <html> at
+   startup (see main.ts / catalog.ts) rather than being genuinely separate
+   pages, to avoid duplicating the whole viewer/catalog bundles a second
+   time — see the comment where isExternalMode is set in each file. */
+.external-mode .external-hide {
+  display: none !important;
+}

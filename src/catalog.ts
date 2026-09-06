@@ -22,15 +22,33 @@ function getStoredTheme(): Theme {
 let currentTheme = getStoredTheme();
 document.documentElement.setAttribute("data-theme", currentTheme);
 
+// External catalog mode (?external=1&job=<number>) — a restricted view
+// scoped to one project, for sharing alongside an external viewer link.
+// Same "mode flag on the same page" approach as the viewer — see the CSS
+// comment on .external-mode in app.css (this page's copy is in
+// catalog.css) for why.
+const startupParams = new URLSearchParams(location.search);
+const isExternalMode = startupParams.get("external") === "1";
+const externalJob = startupParams.get("job");
+if (isExternalMode) document.documentElement.classList.add("external-mode");
+
+function withExternalParams(url: URL): URL {
+  if (isExternalMode) {
+    url.searchParams.set("external", "1");
+    if (externalJob) url.searchParams.set("job", externalJob);
+  }
+  return url;
+}
+
 const app = document.getElementById("app")!;
 
 app.innerHTML = `
   <div class="catalog-shell">
     <header class="catalog-topbar">
       <div class="wordmark"><img class="brand-mark" src="${import.meta.env.BASE_URL}brand/austruss-icon.png" alt="Austruss" /><span class="wordmark-text">Austruss Online Viewer</span></div>
-      <a class="nav-link" href="${import.meta.env.BASE_URL}index.html" title="Open the viewer">${BEAM_ICON}<span class="nav-link-text">Open viewer</span></a>
+      <a class="nav-link external-hide" href="${import.meta.env.BASE_URL}index.html" title="Open the viewer">${BEAM_ICON}<span class="nav-link-text">Open viewer</span></a>
       <input class="catalog-search" id="search" type="text" placeholder="Search job, project, zone…" />
-      <label class="show-completed-toggle" id="show-completed-wrap">
+      <label class="show-completed-toggle external-hide" id="show-completed-wrap">
         <input type="checkbox" id="show-completed" />
         Show completed
       </label>
@@ -162,7 +180,12 @@ function render(entries: Entry[]) {
 
           const link = document.createElement("a");
           link.className = "model-row-link";
-          link.href = `${import.meta.env.BASE_URL}index.html?fileId=${encodeURIComponent(entry.file.id)}&name=${encodeURIComponent(entry.file.name)}`;
+          const linkUrl = withExternalParams(
+            new URL(`${import.meta.env.BASE_URL}index.html`, location.origin),
+          );
+          linkUrl.searchParams.set("fileId", entry.file.id);
+          linkUrl.searchParams.set("name", entry.file.name);
+          link.href = linkUrl.toString();
           link.innerHTML = `
             <span class="model-drawing">${escapeHtml(entry.parsed.drawingNumber)}</span>
             <span class="model-desc">${escapeHtml(entry.parsed.description || entry.file.name)}</span>
@@ -262,8 +285,14 @@ Edit public/drive-config.json with your Apps Script deployment URL and your Driv
       })
       .filter((e): e is Entry => e !== null);
 
+    if (isExternalMode && externalJob) {
+      allEntries = allEntries.filter((e) => e.parsed.jobNumber === externalJob);
+    }
+
     if (!allEntries.length) {
-      bodyEl.innerHTML = `<p class="catalog-state">No .ifc or .frag files found in the configured Drive folder (or none match the naming convention).</p>`;
+      bodyEl.innerHTML = isExternalMode
+        ? `<p class="catalog-state">No other models found for this project.</p>`
+        : `<p class="catalog-state">No .ifc or .frag files found in the configured Drive folder (or none match the naming convention).</p>`;
       return;
     }
     render(allEntries);

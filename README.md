@@ -62,7 +62,15 @@ unless you're testing a Pages-path build locally
   element's actual center and following the camera as you orbit
 - **Isolate / show all** — hide everything except the current selection,
   or reset visibility
-- **Multi-model overlay** — "Open IFC" replaces whatever's loaded, as
+- **Multi-model overlay — currently disabled.** The code is all still
+  here (tree groups, coordination alignment, Sessions, Browse Drive,
+  catalog multi-select) but the entry points are hidden pending a bug fix
+  — loading more than ~2-3 models together can still misposition or lose
+  models. To re-enable: remove `hidden` from `.tree-head-actions` in
+  `main.ts`'s markup and `display: none` from `.model-select` in
+  `catalog.css`. Everything below in this section describes what's there
+  once re-enabled, not current default behavior.
+- ~~**Multi-model overlay**~~ — "Open IFC" replaces whatever's loaded, as
   before. A "+" button in the model tree's header adds another model
   alongside it instead (e.g. overlaying a services model over a
   structural one) — either by uploading a file, or by browsing and
@@ -74,7 +82,7 @@ unless you're testing a Pages-path build locally
   The catalog page also supports this directly — check the box on
   several models and hit "Open together" to load them all as one
   overlay in a single trip, instead of adding them one at a time
-- **Sessions** — a bookmark button next to "+" saves the current set of
+- ~~**Sessions**~~ — a bookmark button next to "+" saves the current set of
   loaded models under a name, for recalling the same overlay setup
   later without re-adding each one by hand. Only models that were loaded
   *from Drive* can be included (a locally-uploaded file has no stable
@@ -98,13 +106,24 @@ unless you're testing a Pages-path build locally
   (hidden by default, opened via the same gutter toggles, each with its
   own close button since the toggle that opened it gets covered once the
   overlay is up), the toolbar condenses to Fit / Isolate / Show all /
-  Open IFC / theme toggle, and the header logo and nav link shrink to
-  icon-only. Touch orbit/pan/zoom comes from `camera-controls`' own
-  defaults (one-finger orbit, two-finger pinch-zoom + pan) — verified
-  against its source rather than assumed, and `touch-action: none` is set
-  on the canvas so the browser doesn't intercept those gestures as page
-  scroll/zoom instead. The catalog page's header wraps onto multiple
-  rows at narrow widths rather than needing separate mobile markup
+  theme toggle (Open IFC is desktop-only — mobile use is expected to be
+  arriving via a shared link, not local upload), and the header logo and
+  nav link shrink to icon-only. Touch orbit/pan/zoom comes from
+  `camera-controls`' own defaults (one-finger orbit, two-finger
+  pinch-zoom + pan) — verified against its source rather than assumed,
+  and `touch-action: none` is set on the canvas so the browser doesn't
+  intercept those gestures as page scroll/zoom instead. The catalog
+  page's header wraps onto multiple rows at narrow widths, and its body
+  scrolls independently (found and fixed a real bug here — the whole app
+  has `overflow: hidden` on `html`/`body` for the viewer's fixed layout,
+  which the catalog page had silently inherited despite being a plain
+  scrollable list, with nothing giving it its own scroll container)
+- **Model display names** — anywhere a loaded model's name is shown (the
+  viewer header, spatial tree group headers) shows "Job `<number>` —
+  `<Project>` — Zone `<zone>`" instead of the raw filename, parsed the
+  same way the catalog does. Falls back to the raw filename if it
+  doesn't match the naming convention (e.g. a locally-uploaded file with
+  an arbitrary name)
 
 ## What's not here yet
 
@@ -197,6 +216,67 @@ Files that don't match the pattern at all are silently skipped by the
 catalog (they won't crash it, they just won't show up) — worth checking
 `public/projects.json` and the actual Drive filenames if something you
 expect to see isn't appearing.
+
+## Sharing with people outside Austruss
+
+Rather than genuinely separate pages, this is a restricted *mode* on the
+same viewer and catalog, switched on by a `?external=1` URL parameter —
+functionally identical to separate pages from the other end (different
+URL, different look, different capabilities), without duplicating the
+whole viewer/catalog code a second time.
+
+**Worth being clear about upfront**: this app is public (your call,
+earlier in the project) — anything reachable by URL is reachable by
+anyone who has that URL, external mode or not. The restriction here is
+*curation* (don't hand someone your whole company's catalog when they
+only need one project), not real access control. If that ever needs to
+change, it'd mean adding actual authentication, which is a different
+and larger piece of work.
+
+**What external mode strips out**, on the viewer: Set pivot, Background,
+Save locally, Save to Drive. Kept: Fit view, Isolate, Show all, the
+properties panel, theme toggle, and — per request — the ability to
+*select* (not create) saved Locations, if any were included in the link.
+"Browse models" in the header becomes "Other zones," linking to the
+catalog in the same restricted mode instead of the full company catalog.
+
+**On the catalog page**, external mode filters everything to a single
+job number and hides "Show completed" (an internal project-tracking
+concept) and the generic "Open viewer" link (nothing to open without
+picking a specific model first).
+
+**Building a link by hand** — there's no in-app "copy external link"
+button yet (by request; ask if that changes and it's a small add):
+
+```
+index.html?external=1&fileId=<driveFileId>&name=<filename>&job=<jobNumber>
+```
+
+- `fileId` / `name` — same as any catalog "Open" link; find these by
+  opening the model normally first and copying them from the address bar.
+- `job` — the job number, so "Other zones" links to the right
+  project-scoped catalog.
+
+To include selectable Locations, add a `locations` parameter — a
+URL-encoded JSON array:
+
+```
+&locations=%5B%7B%22name%22%3A%22Stair%20core%22%2C%22point%22%3A%7B%22x%22%3A1.2%2C%22y%22%3A0%2C%22z%22%3A3.4%7D%7D%5D
+```
+which decodes to:
+```json
+[{ "name": "Stair core", "point": { "x": 1.2, "y": 0, "z": 3.4 } }]
+```
+The easiest way to get real coordinates: open the model yourself, use
+Set Pivot + Locations to save one, then open your browser's dev tools →
+Application → Local Storage → find the `setout-locations:<filename>` key
+— that's the same `{name, point}` shape, ready to copy into the array
+above and URL-encode.
+
+The equivalent catalog link for "other zones in this project":
+```
+catalog.html?external=1&job=<jobNumber>
+```
 
 ## Deploying to GitHub Pages
 

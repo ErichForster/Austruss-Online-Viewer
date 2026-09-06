@@ -458,6 +458,10 @@
   gap: 4px;
 }
 
+.tree-head-actions[hidden] {
+  display: none;
+}
+
 .tree-add-wrap {
   position: relative;
 }

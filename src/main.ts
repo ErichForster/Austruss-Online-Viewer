@@ -25,13 +25,44 @@ function getStoredTheme(): Theme {
 let currentTheme = getStoredTheme();
 document.documentElement.setAttribute("data-theme", currentTheme);
 
+// External viewer mode (?external=1) — a restricted view for sharing with
+// people outside Austruss. See the CSS comment on .external-mode for why
+// this is a mode flag on this same page rather than a genuinely separate
+// one. ?job=<number> scopes the "browse other models" link to just that
+// project's catalog instead of the full company one.
+const startupParams = new URLSearchParams(location.search);
+const isExternalMode = startupParams.get("external") === "1";
+if (isExternalMode) document.documentElement.classList.add("external-mode");
+const externalJob = startupParams.get("job");
+
+// Locations don't transfer to an external viewer's browser on their own
+// (they live in this device's local storage) — the only way to hand one
+// over is embedding it in the link itself. No in-app link generator for
+// this yet (by request) — see README for the ?locations= format to build
+// one by hand.
+interface ExternalLocation {
+  name: string;
+  point: { x: number; y: number; z: number };
+}
+let externalLocations: ExternalLocation[] = [];
+if (isExternalMode) {
+  const raw = startupParams.get("locations");
+  if (raw) {
+    try {
+      externalLocations = JSON.parse(raw);
+    } catch {
+      // Malformed — ignore rather than break the page over it.
+    }
+  }
+}
+
 const app = document.getElementById("app")!;
 
 app.innerHTML = `
   <div class="shell">
     <header class="topbar">
       <div class="wordmark"><img class="brand-mark" src="${import.meta.env.BASE_URL}brand/austruss-icon.png" alt="Austruss" /><span class="wordmark-text">Austruss Online Viewer</span></div>
-      <a class="nav-link" href="${import.meta.env.BASE_URL}catalog.html" title="Browse saved models">${icon.showAll}<span class="nav-link-text">Browse models</span></a>
+      <a class="nav-link" href="${isExternalMode ? `${import.meta.env.BASE_URL}catalog.html?external=1&job=${encodeURIComponent(externalJob ?? "")}` : `${import.meta.env.BASE_URL}catalog.html`}" title="${isExternalMode ? "View other models in this project" : "Browse saved models"}">${icon.showAll}<span class="nav-link-text">${isExternalMode ? "Other zones" : "Browse models"}</span></a>
       <span class="filename" id="filename"></span>
       <div class="toolbar">
         <button class="tool-btn" id="btn-fit" title="Fit view" disabled>${icon.fit}Fit</button>
@@ -39,13 +70,13 @@ app.innerHTML = `
         <button class="tool-btn" id="btn-isolate" title="Isolate selection" disabled>${icon.isolate}Isolate</button>
         <button class="tool-btn" id="btn-show-all" title="Show all" disabled>${icon.showAll}Show all</button>
         <div class="tool-sep desktop-only"></div>
-        <button class="tool-btn desktop-only" id="btn-pivot" title="Click a point on the model to set it as the orbit center" disabled>${icon.pivot}Set pivot</button>
+        <button class="tool-btn desktop-only external-hide" id="btn-pivot" title="Click a point on the model to set it as the orbit center" disabled>${icon.pivot}Set pivot</button>
         <div class="bg-picker-wrap desktop-only">
           <button class="tool-btn" id="btn-locations" title="Save and recall named pivot points" disabled>${icon.mapPin}Locations</button>
           <div class="bg-picker locations-picker" id="locations-picker" hidden>
             <div class="save-picker-body">
-              <label class="save-picker-label" for="location-name-input">Save current pivot as</label>
-              <div class="locations-save-row">
+              <label class="save-picker-label external-hide" for="location-name-input">Save current pivot as</label>
+              <div class="locations-save-row external-hide">
                 <input type="text" id="location-name-input" class="save-filename-input" placeholder="e.g. Stair core" />
                 <button class="upload-btn" id="location-save-btn">Save</button>
               </div>
@@ -53,7 +84,7 @@ app.innerHTML = `
             </div>
           </div>
         </div>
-        <div class="bg-picker-wrap desktop-only">
+        <div class="bg-picker-wrap desktop-only external-hide">
           <button class="tool-btn" id="btn-background" title="Change viewport background" disabled>${icon.background}Background</button>
           <div class="bg-picker" id="bg-picker" hidden>
             <button class="bg-swatch" data-bg="theme" title="Match theme"><span class="bg-swatch-half bg-swatch-dark"></span><span class="bg-swatch-half bg-swatch-light"></span></button>
@@ -71,10 +102,10 @@ app.innerHTML = `
           </div>
         </div>
         <div class="tool-sep"></div>
-        <label class="upload-btn" for="file-input">${icon.upload}Open IFC</label>
+        <label class="upload-btn desktop-only" for="file-input">${icon.upload}Open IFC</label>
         <input type="file" id="add-model-input" accept=".ifc,.frag" style="display:none" />
-        <button class="tool-btn desktop-only" id="btn-save-local" title="Download the converted .frag file to your computer — for testing, without needing Drive configured" disabled>${icon.localSave}Save locally</button>
-        <div class="bg-picker-wrap desktop-only">
+        <button class="tool-btn desktop-only external-hide" id="btn-save-local" title="Download the converted .frag file to your computer — for testing, without needing Drive configured" disabled>${icon.localSave}Save locally</button>
+        <div class="bg-picker-wrap desktop-only external-hide">
           <button class="tool-btn" id="btn-save" title="Save to the shared Drive folder — saves every loaded model separately if more than one is open" disabled>${icon.cloudSave}Save to Drive</button>
           <div class="bg-picker save-picker" id="save-picker" hidden>
             <div class="save-picker-body">
@@ -104,7 +135,7 @@ app.innerHTML = `
       <aside class="panel panel-left" id="panel-tree">
         <div class="panel-head">
           <span class="panel-title">Model tree</span>
-          <div class="tree-head-actions">
+          <div class="tree-head-actions" hidden title="Multi-model loading is temporarily disabled — see the notes on the open bug">
             <div class="tree-add-wrap">
               <button class="panel-add-btn" id="btn-sessions" title="Save or recall a set of models">${icon.bookmark}</button>
               <div class="bg-picker save-picker sessions-picker" id="sessions-picker" hidden>
@@ -265,10 +296,15 @@ const loadedModels = new Map<string, string>(); // modelId -> filename
 // be reliably re-fetched later. A locally-uploaded file has no entry here.
 const modelDriveFileIds = new Map<string, string>(); // modelId -> Drive fileId
 
-function updateFilenameDisplay() {
-  if (loadedModels.size === 0) filenameEl.textContent = "";
-  else if (loadedModels.size === 1) filenameEl.textContent = [...loadedModels.values()][0];
-  else filenameEl.textContent = `${loadedModels.size} models`;
+async function updateFilenameDisplay() {
+  if (loadedModels.size === 0) {
+    filenameEl.textContent = "";
+  } else if (loadedModels.size === 1) {
+    const { formatModelLabel } = await import("./model-picker");
+    filenameEl.textContent = await formatModelLabel([...loadedModels.values()][0]);
+  } else {
+    filenameEl.textContent = `${loadedModels.size} models`;
+  }
 }
 
 const tree = new SpatialTree(
@@ -557,7 +593,8 @@ async function handleFile(file: File, mode: "replace" | "add" = "replace") {
       `[handleFile] getSpatialStructure() done (${((performance.now() - tStruct) / 1000).toFixed(1)}s)`,
     );
     const tTree = performance.now();
-    tree.addModel(model.modelId, file.name, structure);
+    const { formatModelLabel } = await import("./model-picker");
+    tree.addModel(model.modelId, await formatModelLabel(file.name), structure);
     console.log(`[handleFile] tree.addModel() done (${((performance.now() - tTree) / 1000).toFixed(1)}s)`);
   } catch (err) {
     console.error(err);
@@ -932,6 +969,27 @@ function setLocations(modelId: string, locations: SavedLocation[]) {
 }
 function renderLocationsList() {
   locationsList.innerHTML = "";
+  // External mode shows the locations embedded in the link (no delete —
+  // nothing to edit here) instead of this device's local storage, which
+  // an external viewer's browser wouldn't have anyway.
+  if (isExternalMode) {
+    if (!externalLocations.length) {
+      locationsList.innerHTML = `<div class="locations-empty">No locations were included with this link.</div>`;
+      return;
+    }
+    for (const loc of externalLocations) {
+      const row = document.createElement("div");
+      row.className = "location-row";
+      row.innerHTML = `<span class="location-row-name">${loc.name.replace(/</g, "&lt;")}</span>`;
+      row.addEventListener("click", () => {
+        viewer.goToPivot(loc.point);
+        locationsPicker.hidden = true;
+      });
+      locationsList.appendChild(row);
+    }
+    return;
+  }
+
   if (!currentModelId) return;
   const locations = getLocations(currentModelId);
   if (!locations.length) {

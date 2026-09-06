@@ -52,6 +52,24 @@ export interface PickerGroups {
   scriptUrl: string;
 }
 
+type ProjectsMap = Record<string, string | { name: string; status?: string }>;
+
+let projectsCache: Promise<ProjectsMap> | null = null;
+function loadProjectsMap(): Promise<ProjectsMap> {
+  if (!projectsCache) {
+    projectsCache = fetch(`${import.meta.env.BASE_URL}projects.json`)
+      .then((res) => (res.ok ? res.json() : {}))
+      .catch(() => ({}));
+  }
+  return projectsCache;
+}
+
+function resolveProjectName(projects: ProjectsMap, jobNumber: string): string {
+  const entry = projects[jobNumber];
+  const name = typeof entry === "string" ? entry : entry?.name;
+  return name ?? `Job ${jobNumber}`;
+}
+
 // Fetches the same drive-config.json / project catalog the main catalog
 // page uses, and returns a flat, parsed, project-labelled list ready to
 // group and render.
@@ -61,13 +79,7 @@ export async function fetchDriveModels(): Promise<PickerGroups> {
     throw new Error("Google Drive isn't configured yet — see README.md \"Google Drive setup\".");
   }
 
-  let projects: Record<string, string> = {};
-  try {
-    const res = await fetch(`${import.meta.env.BASE_URL}projects.json`);
-    if (res.ok) projects = await res.json();
-  } catch {
-    // Optional — falls back to "Job <number>" labels.
-  }
+  const projects = await loadProjectsMap();
 
   const url = `${config.scriptUrl}?action=list&folderId=${encodeURIComponent(config.rootFolderId)}`;
   const res = await fetch(url);
@@ -79,9 +91,22 @@ export async function fetchDriveModels(): Promise<PickerGroups> {
   for (const file of data.files as DriveFile[]) {
     const parsed = parseModelFilename(file.name);
     if (!parsed) continue;
-    entries.push({ file, parsed, projectName: projects[parsed.jobNumber] ?? `Job ${parsed.jobNumber}` });
+    entries.push({ file, parsed, projectName: resolveProjectName(projects, parsed.jobNumber) });
   }
   return { entries, scriptUrl: config.scriptUrl };
+}
+
+// Builds a "Job <number> — <Project> — Zone <zone>" style label for
+// display in place of a raw filename, e.g. in the viewer header and the
+// spatial tree's model group headers. Falls back to the filename itself
+// if it doesn't match the naming convention (a locally-uploaded file with
+// an arbitrary name, for instance).
+export async function formatModelLabel(filename: string): Promise<string> {
+  const parsed = parseModelFilename(filename);
+  if (!parsed) return filename;
+  const projects = await loadProjectsMap();
+  const projectName = resolveProjectName(projects, parsed.jobNumber);
+  return `Job ${parsed.jobNumber} — ${projectName} — Zone ${parsed.zone}`;
 }
 
 export async function downloadDriveModel(scriptUrl: string, fileId: string): Promise<{ name: string; bytes: Uint8Array }> {
