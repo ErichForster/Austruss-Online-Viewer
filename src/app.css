@@ -379,27 +379,30 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
-  background: none;
-  border: none;
-  color: var(--text-muted);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
   border-radius: var(--radius-sm);
 }
 
 .location-row-home:hover {
   color: var(--accent);
-  background: var(--bg-panel);
+  border-color: var(--accent);
+  background: var(--bg-panel-raised);
 }
 
 .location-row-home.is-home {
-  color: var(--accent);
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 .location-row-home svg {
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
 }
 
 .upload-btn {
@@ -1499,4 +1502,26 @@
 #save-overlay-cancel[hidden],
 #save-overlay-close[hidden] {
   display: none;
+}
+
+/* ---------- Location name labels (floating above blue 3D markers) ---------- */
+.location-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, calc(-100% - 14px));
+  pointer-events: none;
+  z-index: 7;
+  background: var(--bg-panel-raised);
+  border: 1px solid #3b82f6;
+  border-radius: var(--radius-sm);
+  padding: 4px 9px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-primary);
 }

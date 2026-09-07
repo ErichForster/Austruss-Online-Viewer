@@ -444,6 +444,7 @@ const tree = new SpatialTree(
       dropzone.style.display = "flex";
       renderProperties(propsRoot, null);
       hidePin();
+      setLocationLabels([]);
     }
   },
 );
@@ -505,6 +506,50 @@ function showPin(point: { x: number; y: number; z: number }, name: string, frame
 function hidePin() {
   pinPoint = null;
   selectionPin.hidden = true;
+}
+
+// --- Location name labels: small floating tags above each blue location
+// marker, using the same screen-projection approach as the selection pin
+// above, just for several points at once instead of one. ---
+interface LocationLabelState {
+  point: { x: number; y: number; z: number };
+  el: HTMLDivElement;
+}
+let locationLabels: LocationLabelState[] = [];
+let locationLabelLoopActive = false;
+
+function updateLocationLabelPositions() {
+  if (!locationLabels.length) {
+    locationLabelLoopActive = false;
+    return;
+  }
+  for (const label of locationLabels) {
+    const pos = viewer.worldToScreen(label.point);
+    if (pos) {
+      label.el.style.display = "block";
+      label.el.style.left = `${pos.left}px`;
+      label.el.style.top = `${pos.top}px`;
+    } else {
+      label.el.style.display = "none";
+    }
+  }
+  requestAnimationFrame(updateLocationLabelPositions);
+}
+
+function setLocationLabels(locations: { name: string; point: { x: number; y: number; z: number } }[]) {
+  for (const label of locationLabels) label.el.remove();
+  locationLabels = locations.map((loc) => {
+    const el = document.createElement("div");
+    el.className = "location-label";
+    el.textContent = loc.name;
+    el.style.display = "none";
+    viewportWrap.appendChild(el);
+    return { point: loc.point, el };
+  });
+  if (locationLabels.length && !locationLabelLoopActive) {
+    locationLabelLoopActive = true;
+    updateLocationLabelPositions();
+  }
 }
 
 viewer.onSelect = async (info) => {
@@ -648,6 +693,7 @@ async function handleFile(file: File, mode: "replace" | "add" = "replace") {
     tree.clear();
     renderProperties(propsRoot, null);
     hidePin();
+    setLocationLabels([]);
   }
 
   try {
@@ -703,6 +749,12 @@ async function handleFile(file: File, mode: "replace" | "add" = "replace") {
     currentModelId = model.modelId;
     currentFileName = file.name;
     updateShareButtonState();
+    // Show this model's own saved locations right away rather than
+    // whatever was left over from a previously loaded model, or nothing
+    // at all until the Locations popover happens to get opened.
+    const initialLocations = getLocations(model.modelId);
+    viewer.setLocationMarkers(initialLocations.map((l) => l.point));
+    setLocationLabels(initialLocations);
     btnSaveLocal.disabled = false;
     const config = await getDriveConfig().catch(() => null);
     btnSave.disabled = !config || !isConfigured(config.scriptUrl);
@@ -882,6 +934,7 @@ async function loadSession(session: SavedSession) {
     currentModelId = null;
     currentSelection = null;
     updateShareButtonState();
+    setLocationLabels([]);
     btnSave.disabled = true;
     btnSaveLocal.disabled = true;
     tree.clear();
@@ -1160,6 +1213,7 @@ function setLocations(modelId: string, locations: SavedLocation[]) {
     // Storage quota etc. — not worth interrupting the person over.
   }
   viewer.setLocationMarkers(locations.map((l) => l.point));
+  setLocationLabels(locations);
 }
 // Older saved locations (from before cameraPosition existed) only have a
 // pivot point — recall falls back to the pivot-only jump for those rather
@@ -1175,6 +1229,7 @@ function renderLocationsList() {
   // an external viewer's browser wouldn't have anyway.
   if (isExternalMode) {
     viewer.setLocationMarkers(externalLocations.map((l) => l.point));
+    setLocationLabels(externalLocations);
     if (!externalLocations.length) {
       locationsList.innerHTML = `<div class="locations-empty">No locations were included with this link.</div>`;
       return;
@@ -1195,6 +1250,7 @@ function renderLocationsList() {
   if (!currentModelId) return;
   const locations = getLocations(currentModelId);
   viewer.setLocationMarkers(locations.map((l) => l.point));
+  setLocationLabels(locations);
   if (!locations.length) {
     locationsList.innerHTML = `<div class="locations-empty">No saved locations for this model yet.</div>`;
     return;

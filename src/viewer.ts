@@ -36,8 +36,9 @@ export class IfcViewer {
   private currentTheme: Theme = "dark";
   private explicitBackground: string | null = null;
   private backgroundTexture: THREE.Texture | null = null;
-  private markerGeometry!: THREE.SphereGeometry;
+  private pivotMarkerGeometry!: THREE.SphereGeometry;
   private pivotMarker!: THREE.Mesh;
+  private locationMarkerGeometry!: THREE.SphereGeometry;
   private locationMarkerMaterial!: THREE.MeshBasicMaterial;
   private locationMarkerGroup!: THREE.Group;
 
@@ -122,54 +123,62 @@ export class IfcViewer {
       },
     });
 
-    this.highlighter.events.select.onHighlight.add((modelIdMap) => {
+    this.highlighter.events.select.onHighlight.add(async (modelIdMap) => {
       const modelId = Object.keys(modelIdMap)[0];
       const localId = modelId ? [...modelIdMap[modelId]][0] : undefined;
       if (modelId && localId !== undefined) {
         this.onSelect?.({ modelId, localId });
+        // Selecting an element locks the pivot onto it — an actual point
+        // on real geometry, rather than the raw orbit target drifting
+        // into empty space during panning (see setPivotMarkerPosition).
+        // Doesn't move the camera itself, only what future orbiting
+        // rotates around and where the green marker sits.
+        const center = await this.getItemCenter(modelId, localId);
+        if (center) {
+          this.world.camera.controls.setTarget(center.x, center.y, center.z, true);
+          this.setPivotMarkerPosition(center);
+        }
       }
     });
     this.highlighter.events.select.onClear.add(() => this.onSelect?.(null));
 
     // --- Pivot + Location markers ---
     // Small always-on-top spheres (depthTest off) so they stay visible
-    // through the model rather than getting buried inside it. 0.15 world
-    // units (assumed metres, matching typical IFC export units) — a
-    // reasonable size for building-scale models, not something derived
-    // from the actual model's own scale.
-    this.markerGeometry = new THREE.SphereGeometry(0.15, 16, 16);
+    // through the model rather than getting buried inside it. Sizes
+    // assume metres (typical IFC export units) — not derived from the
+    // actual model's own scale.
+    this.pivotMarkerGeometry = new THREE.SphereGeometry(0.15, 16, 16);
     this.pivotMarker = new THREE.Mesh(
-      this.markerGeometry,
+      this.pivotMarkerGeometry,
       new THREE.MeshBasicMaterial({ color: 0x2ecc71, depthTest: false, transparent: true, opacity: 0.95 }),
     );
     this.pivotMarker.renderOrder = 999;
     this.pivotMarker.visible = false;
     this.world.scene.three.add(this.pivotMarker);
 
+    // Bigger than the pivot marker — these mark saved locations you're
+    // meant to notice and pick out at a glance, not a live cursor.
+    this.locationMarkerGeometry = new THREE.SphereGeometry(0.28, 16, 16);
     this.locationMarkerMaterial = new THREE.MeshBasicMaterial({
       color: 0x3b82f6, depthTest: false, transparent: true, opacity: 0.95,
     });
     this.locationMarkerGroup = new THREE.Group();
     this.world.scene.three.add(this.locationMarkerGroup);
 
-    this.world.camera.controls.addEventListener("update", () => this.updatePivotMarker());
-
     window.addEventListener("resize", () => this.world.renderer?.resize());
   }
 
-  // Tracks the camera's current orbit target live — called on every
-  // camera-controls "update" event, which fires during orbit, pan, zoom,
-  // and animated transitions alike, so the marker follows pivot changes
-  // caused by any of them (panning in particular carries the pivot along
-  // with it, not just explicit Set Pivot clicks).
-  private updatePivotMarker() {
-    if (this.fragments.list.size === 0) {
-      this.pivotMarker.visible = false;
-      return;
-    }
-    const target = this.world.camera.controls.getTarget(new THREE.Vector3());
-    this.pivotMarker.position.copy(target);
-    this.pivotMarker.visible = true;
+  // Explicitly (re)positions the pivot marker — called only when the
+  // pivot is deliberately set (Set Pivot click, a Location recall, or
+  // selecting an element), not on every camera movement. Earlier this
+  // tracked the camera's live orbit target on every "update" event, which
+  // meant panning (which carries the target along with it) made the
+  // marker drift off into empty space above the model, disconnected from
+  // any real point on it — this fixes that by only moving the marker
+  // when there's an actual new point to show, not a moving one.
+  private setPivotMarkerPosition(point: { x: number; y: number; z: number }) {
+    this.pivotMarker.position.set(point.x, point.y, point.z);
+    this.pivotMarker.visible = this.fragments.list.size > 0;
   }
 
   // Replaces the full set of blue location markers — called whenever the
@@ -177,7 +186,7 @@ export class IfcViewer {
   setLocationMarkers(points: { x: number; y: number; z: number }[]) {
     this.locationMarkerGroup.clear();
     for (const p of points) {
-      const marker = new THREE.Mesh(this.markerGeometry, this.locationMarkerMaterial);
+      const marker = new THREE.Mesh(this.locationMarkerGeometry, this.locationMarkerMaterial);
       marker.position.set(p.x, p.y, p.z);
       marker.renderOrder = 998;
       this.locationMarkerGroup.add(marker);
@@ -342,6 +351,7 @@ export class IfcViewer {
     if (!hit) return false;
     const { x, y, z } = hit.point;
     this.world.camera.controls.setTarget(x, y, z, true);
+    this.setPivotMarkerPosition({ x, y, z });
     return true;
   }
 
@@ -359,6 +369,7 @@ export class IfcViewer {
 
   goToPivot(point: { x: number; y: number; z: number }, animate = true) {
     this.world.camera.controls.setTarget(point.x, point.y, point.z, animate);
+    this.setPivotMarkerPosition(point);
   }
 
   // Restores a full saved view — both the camera's own position and what
@@ -377,6 +388,7 @@ export class IfcViewer {
       point.x, point.y, point.z,
       animate,
     );
+    this.setPivotMarkerPosition(point);
     await this.fragments.core.update(true);
   }
 

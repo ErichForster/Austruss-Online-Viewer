@@ -60,15 +60,19 @@ unless you're testing a Pages-path build locally
   this existed still work — they just recall the pivot alone, since no
   camera position was ever captured for them
 - **Pivot and location markers** — a small green sphere in the 3D scene
-  always shows the current pivot point, live-updating as you orbit, pan,
-  or zoom (panning in particular carries the pivot along with it, not
-  just explicit Set Pivot clicks — the marker reflects that). Every saved
-  Location for the loaded model shows as a small blue sphere at the same
-  time, so you can see where they all are at a glance. Both are simple
-  always-on-top spheres sized for typical metre-scale IFC models — not
-  derived from the model's own scale, and not screen-space-constant
-  (they'll look larger up close, smaller from a distance, like anything
-  else in the scene)
+  shows the current pivot point, updated only when it's deliberately set
+  (Set Pivot, recalling a Location, or selecting an element — selecting
+  something locks the pivot onto it, both retargeting the orbit and
+  moving the marker there). It's deliberately *not* tracked continuously
+  off the camera's live orbit target — panning moves that target right
+  along with it, so a marker tied to it drifts off the model into empty
+  space the moment you pan, disconnected from any real point. Every saved
+  Location for the loaded model shows as a larger blue sphere with its
+  name floating above it, all at once, so you can see where they all are
+  at a glance. Markers are simple always-on-top spheres sized for typical
+  metre-scale IFC models — not derived from the model's own scale, and
+  not screen-space-constant (they'll look larger up close, smaller from a
+  distance, like anything else in the scene)
 - **Spatial tree** (left panel) — click any node to select and zoom the
   corresponding element; category badges show the IFC entity type
 - **Properties panel** (right) — attributes plus property sets
