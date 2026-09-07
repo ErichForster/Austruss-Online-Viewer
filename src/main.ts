@@ -1,6 +1,7 @@
 import "./style.css";
 import "./app.css";
 import * as WEBIFC from "web-ifc";
+import { toDataURL as qrToDataURL } from "qrcode";
 import { icon } from "./icons";
 import { IfcViewer, type Theme } from "./viewer";
 import { SpatialTree } from "./tree";
@@ -128,6 +129,7 @@ app.innerHTML = `
             </div>
           </div>
         </div>
+        <button class="tool-btn external-hide" id="btn-share" title="Get an external, restricted link to this model" disabled>${icon.share}Share</button>
         <button class="theme-toggle" id="theme-toggle" title="Toggle light/dark theme"></button>
       </div>
     </header>
@@ -211,6 +213,25 @@ app.innerHTML = `
       </div>
     </div>
   </div>
+  <div class="modal-overlay" id="share-modal" hidden>
+    <div class="modal-panel share-modal-panel">
+      <div class="modal-head">
+        <span class="modal-title">Share externally</span>
+        <button class="modal-close" id="share-close" title="Close">${icon.close}</button>
+      </div>
+      <div class="modal-body" id="share-body">
+        <p class="share-hint">This link is restricted to viewing (no save/edit tools) and, if a job number is known, scoped to this project. See "Sharing with people outside Austruss" in the README — this app is public, so this is curation, not real access control.</p>
+        <div class="share-row">
+          <input type="text" id="share-link-input" class="share-link-input" readonly />
+          <button class="upload-btn" id="share-copy-link">${icon.copy}Copy link</button>
+        </div>
+        <div class="share-qr-wrap">
+          <img id="share-qr-img" class="share-qr-img" alt="QR code for the share link" />
+          <button class="tool-btn" id="share-copy-qr">${icon.copy}Copy QR image</button>
+        </div>
+      </div>
+    </div>
+  </div>
 `;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -250,6 +271,13 @@ const saveDrawingInput = $<HTMLInputElement>("save-drawing");
 const saveResultEl = $("save-result");
 const saveCancelBtn = $<HTMLButtonElement>("save-cancel");
 const saveConfirmBtn = $<HTMLButtonElement>("save-confirm");
+const btnShare = $<HTMLButtonElement>("btn-share");
+const shareModal = $("share-modal");
+const shareClose = $<HTMLButtonElement>("share-close");
+const shareLinkInput = $<HTMLInputElement>("share-link-input");
+const shareCopyLinkBtn = $<HTMLButtonElement>("share-copy-link");
+const shareQrImg = $<HTMLImageElement>("share-qr-img");
+const shareCopyQrBtn = $<HTMLButtonElement>("share-copy-qr");
 const themeToggleBtn = $<HTMLButtonElement>("theme-toggle");
 const toggleTree = $("toggle-tree");
 const toggleProps = $("toggle-props");
@@ -307,6 +335,13 @@ async function updateFilenameDisplay() {
   }
 }
 
+// Share (external link) only makes sense for a model that's actually on
+// Drive — a locally-uploaded file that's never been saved has no stable
+// fileId an external viewer could fetch.
+function updateShareButtonState() {
+  btnShare.disabled = !currentModelId || !modelDriveFileIds.has(currentModelId);
+}
+
 const tree = new SpatialTree(
   treeRoot,
   async (modelId, localId) => {
@@ -322,6 +357,7 @@ const tree = new SpatialTree(
       const remaining = [...loadedModels.keys()];
       currentModelId = remaining.length ? remaining[remaining.length - 1] : null;
       currentFileName = currentModelId ? loadedModels.get(currentModelId)! : "";
+      updateShareButtonState();
     }
     if (loadedModels.size === 0) {
       btnFit.disabled = true;
@@ -412,6 +448,7 @@ viewer.onSelect = async (info) => {
   if (loadedModels.has(info.modelId)) {
     currentModelId = info.modelId;
     currentFileName = loadedModels.get(info.modelId)!;
+    updateShareButtonState();
   }
   tree.select(`${info.modelId}:${info.localId}`);
   const data = await viewer.getItemData(info.modelId, info.localId);
@@ -531,6 +568,7 @@ async function handleFile(file: File, mode: "replace" | "add" = "replace") {
     modelDriveFileIds.clear();
     currentModelId = null;
     currentSelection = null;
+    updateShareButtonState();
     btnSave.disabled = true;
     btnSaveLocal.disabled = true;
     tree.clear();
@@ -583,6 +621,7 @@ async function handleFile(file: File, mode: "replace" | "add" = "replace") {
     updateFilenameDisplay();
     currentModelId = model.modelId;
     currentFileName = file.name;
+    updateShareButtonState();
     btnSaveLocal.disabled = false;
     const config = await getDriveConfig().catch(() => null);
     btnSave.disabled = !config || !isConfigured(config.scriptUrl);
@@ -761,6 +800,7 @@ async function loadSession(session: SavedSession) {
     modelDriveFileIds.clear();
     currentModelId = null;
     currentSelection = null;
+    updateShareButtonState();
     btnSave.disabled = true;
     btnSaveLocal.disabled = true;
     tree.clear();
@@ -901,6 +941,65 @@ btnBrowseDrive.addEventListener("click", async () => {
   }
 });
 driveBrowseSearch.addEventListener("input", () => renderDriveBrowseList(driveBrowseSearch.value));
+
+// --- Share externally modal ---
+function closeShareModal() {
+  shareModal.hidden = true;
+}
+shareClose.addEventListener("click", closeShareModal);
+shareModal.addEventListener("click", (e) => {
+  if (e.target === shareModal) closeShareModal();
+});
+
+btnShare.addEventListener("click", async () => {
+  if (!currentModelId) return;
+  const fileId = modelDriveFileIds.get(currentModelId);
+  const name = loadedModels.get(currentModelId);
+  if (!fileId || !name) return;
+
+  const { parseModelFilename } = await import("./model-picker");
+  const parsed = parseModelFilename(name);
+
+  const url = new URL(`${import.meta.env.BASE_URL}index.html`, location.origin);
+  url.searchParams.set("external", "1");
+  url.searchParams.set("fileId", fileId);
+  url.searchParams.set("name", name);
+  if (parsed) url.searchParams.set("job", parsed.jobNumber);
+  const linkText = url.toString();
+
+  shareLinkInput.value = linkText;
+  shareQrImg.src = await qrToDataURL(linkText, { width: 400, margin: 1 });
+  shareModal.hidden = false;
+});
+
+shareCopyLinkBtn.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(shareLinkInput.value);
+    const original = shareCopyLinkBtn.innerHTML;
+    shareCopyLinkBtn.textContent = "Copied!";
+    setTimeout(() => (shareCopyLinkBtn.innerHTML = original), 1500);
+  } catch {
+    shareLinkInput.select();
+    showError("Couldn't copy automatically — the link is selected, try Ctrl/Cmd+C.");
+  }
+});
+
+shareCopyQrBtn.addEventListener("click", async () => {
+  try {
+    const res = await fetch(shareQrImg.src);
+    const blob = await res.blob();
+    await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+    const original = shareCopyQrBtn.innerHTML;
+    shareCopyQrBtn.textContent = "Copied!";
+    setTimeout(() => (shareCopyQrBtn.innerHTML = original), 1500);
+  } catch (err) {
+    showError(
+      err instanceof Error
+        ? `Couldn't copy the QR image: ${err.message} — right-click it and choose "Copy image" instead.`
+        : "Couldn't copy the QR image — right-click it and choose \"Copy image\" instead.",
+    );
+  }
+});
 
 dropzone.addEventListener("dragover", (e) => {
   e.preventDefault();
@@ -1241,6 +1340,7 @@ async function saveModelToDrive(modelId: string, filename: string): Promise<stri
   const result = await res.json();
   if (!result.success) throw new Error(result.error || "Unknown error");
   loadedModels.set(modelId, filename);
+  modelDriveFileIds.set(modelId, result.fileId as string);
   return result.webViewLink as string;
 }
 
@@ -1252,6 +1352,7 @@ async function saveToDrive(filename: string) {
     stopLoading();
     currentFileName = filename;
     updateFilenameDisplay();
+    updateShareButtonState();
     showSaveResult(filename, link);
   } catch (err) {
     stopLoading();

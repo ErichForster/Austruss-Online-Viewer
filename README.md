@@ -245,17 +245,18 @@ job number and hides "Show completed" (an internal project-tracking
 concept) and the generic "Open viewer" link (nothing to open without
 picking a specific model first).
 
-**Building a link by hand** — there's no in-app "copy external link"
-button yet (by request; ask if that changes and it's a small add):
+**Getting the link** — a "Share" button in the viewer toolbar (only
+enabled once the loaded model has actually been saved to or opened from
+Drive — a purely local file has no stable fileId to share) opens a popup
+with the ready-made link, a "Copy link" button, and a QR code with its
+own "Copy QR image" button. This covers the fileId/name/job parts
+automatically; there's still no button for the Locations part below,
+since that one's a bit more involved.
 
+For reference, the link it builds looks like:
 ```
 index.html?external=1&fileId=<driveFileId>&name=<filename>&job=<jobNumber>
 ```
-
-- `fileId` / `name` — same as any catalog "Open" link; find these by
-  opening the model normally first and copying them from the address bar.
-- `job` — the job number, so "Other zones" links to the right
-  project-scoped catalog.
 
 To include selectable Locations, add a `locations` parameter — a
 URL-encoded JSON array:
@@ -271,7 +272,7 @@ The easiest way to get real coordinates: open the model yourself, use
 Set Pivot + Locations to save one, then open your browser's dev tools →
 Application → Local Storage → find the `setout-locations:<filename>` key
 — that's the same `{name, point}` shape, ready to copy into the array
-above and URL-encode.
+above, append to the Share button's link, and URL-encode.
 
 The equivalent catalog link for "other zones in this project":
 ```
