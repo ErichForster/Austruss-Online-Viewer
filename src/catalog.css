@@ -322,3 +322,100 @@
   color: var(--text-secondary);
   white-space: nowrap;
 }
+
+/* ---------- Model edit button + popover ---------- */
+.model-edit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  margin-right: 8px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.model-edit-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.model-edit-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.edit-popover {
+  position: fixed;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  padding: 12px;
+  z-index: 60;
+}
+
+.edit-popover-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 0 0 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.edit-popover-hint.edit-popover-error {
+  color: var(--danger, #c94b4b);
+}
+
+.edit-field-label {
+  font-size: 10.5px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.edit-field-note {
+  text-transform: none;
+  color: var(--text-muted);
+  font-weight: 400;
+  letter-spacing: 0;
+}
+
+.edit-field-input {
+  width: 100%;
+  height: 28px;
+  margin: 3px 0 8px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: 0 8px;
+  box-sizing: border-box;
+}
+
+.edit-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+}
+
+.edit-field-row .edit-field-input {
+  margin-bottom: 0;
+}
+
+.edit-popover-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 4px;
+}

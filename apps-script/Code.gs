@@ -24,6 +24,7 @@
  */
 
 var ALLOWED_EXTENSIONS = [".ifc", ".frag"];
+var OVERRIDES_FILENAME = "catalog-overrides.json";
 
 function doGet(e) {
   var action = (e.parameter.action || "").trim();
@@ -34,12 +35,19 @@ function doGet(e) {
   if (action === "download") {
     return handleDownload(e);
   }
+  if (action === "getOverrides") {
+    return handleGetOverrides(e);
+  }
   return jsonResponse({ status: "ok", message: "Austruss Online Viewer backend is running." });
 }
 
 function doPost(e) {
   try {
     var payload = JSON.parse(e.postData.contents);
+    if (payload.action === "saveOverrides") {
+      return handleSaveOverrides(payload);
+    }
+
     var filename = String(payload.filename || "").trim();
     var contentBase64 = payload.contentBase64;
     var folderId = String(payload.folderId || "").trim();
@@ -144,6 +152,55 @@ function handleDownload(e) {
   } catch (err) {
     return jsonResponse({ success: false, error: "Can't access file " + fileId + " — " + String(err) });
   }
+}
+
+// Returns the catalog's manual corrections (project name overrides by job
+// number, and per-model zone/description/drawing/revision overrides by
+// filename) as stored in the Drive folder — or {} if nothing's been
+// edited yet, which is a normal state, not an error.
+function handleGetOverrides(e) {
+  var folderId = String(e.parameter.folderId || "").trim();
+  if (!folderId) {
+    return jsonResponse({ success: false, error: "No folderId provided" });
+  }
+  var root = getFolderOrError(folderId);
+  if (root.error) return jsonResponse(root.error);
+
+  var existing = root.folder.getFilesByName(OVERRIDES_FILENAME);
+  if (!existing.hasNext()) {
+    return jsonResponse({ success: true, overrides: {} });
+  }
+  try {
+    var content = existing.next().getBlob().getDataAsString();
+    return jsonResponse({ success: true, overrides: JSON.parse(content) });
+  } catch (err) {
+    return jsonResponse({ success: false, error: "Couldn't read the overrides file — " + String(err) });
+  }
+}
+
+// Overwrites catalog-overrides.json in the Drive folder with the given
+// object — the whole file is replaced each time (same overwrite-by-name
+// approach as saving a model), since it's small and always sent whole
+// from the client rather than patched.
+function handleSaveOverrides(payload) {
+  var folderId = String(payload.folderId || "").trim();
+  if (!folderId) {
+    return jsonResponse({ success: false, error: "No folderId provided" });
+  }
+  var root = getFolderOrError(folderId);
+  if (root.error) return jsonResponse(root.error);
+
+  var existing = root.folder.getFilesByName(OVERRIDES_FILENAME);
+  if (existing.hasNext()) {
+    existing.next().setTrashed(true);
+  }
+  var blob = Utilities.newBlob(
+    JSON.stringify(payload.overrides || {}, null, 2),
+    "application/json",
+    OVERRIDES_FILENAME,
+  );
+  root.folder.createFile(blob);
+  return jsonResponse({ success: true });
 }
 
 function getFolderOrError(folderId) {

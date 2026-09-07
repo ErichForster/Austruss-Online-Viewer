@@ -101,6 +101,8 @@ unless you're testing a Pages-path build locally
   directly in the popover
 - Light/dark theme toggle, persisted across visits — defaults to light on
   a first visit with nothing saved yet
+- The Austruss logo/wordmark links back to a blank `index.html` (clears
+  whatever's loaded) — normal viewer only, not the external/share mode
 - Both side panels collapse via the small toggle buttons in the viewport
   gutters
 - **Mobile layout** (≤768px) — the side panels become full-screen overlays
@@ -217,6 +219,29 @@ Files that don't match the pattern at all are silently skipped by the
 catalog (they won't crash it, they just won't show up) — worth checking
 `public/projects.json` and the actual Drive filenames if something you
 expect to see isn't appearing.
+
+### Correcting a bad import from the catalog itself
+
+Each model row has a small pencil/edit button (hidden in external mode —
+see below) for fixing a project name or per-model field that parsed
+wrong, without renaming the actual file in Drive or hand-editing
+`projects.json`. It covers: project name (applies to every model under
+that job number, not just the one you clicked), zone, drawing number,
+revision, and description.
+
+These corrections are saved to a `catalog-overrides.json` file the
+backend creates in your Drive folder — not `projects.json`, and not this
+browser's local storage — so a fix is visible to everyone using the
+catalog, immediately, without needing a rebuild or a push. This needed a
+small addition to `apps-script/Code.gs` (two new actions,
+`getOverrides`/`saveOverrides`) — if you're setting this up fresh, the
+copy already in this repo has it; if you deployed an older version,
+see "Redeploying after a Code.gs change" below.
+
+"Reset to filename" in the edit popup clears the override for that
+model's zone/drawing/revision/description back to whatever the naming
+convention would parse on its own — it doesn't touch the project name,
+since that's shared across the whole job.
 
 ## Sharing with people outside Austruss
 
@@ -371,6 +396,31 @@ deploys it; nobody viewing the site needs to sign in.
 If the catalog shows an error instead of your models, it'll say exactly
 what's wrong (unconfigured script/folder, a backend error, or no matching
 files) — that message is the place to start.
+
+### Redeploying after a Code.gs change
+
+**Unlike everything else in this repo, `apps-script/Code.gs` does not
+auto-deploy on `git push`.** GitHub Pages only serves the frontend
+(`index.html`, `catalog.html`, and their JS/CSS) — the Apps Script backend
+lives entirely on Google's side, in a project you edit at
+script.google.com, separate from this repo. This repo's copy of
+`Code.gs` is the source of truth to *read*, but pushing it to GitHub
+doesn't change what's actually running.
+
+Whenever `Code.gs` changes (a new feature that needs a new action, a bug
+fix in the backend), the fix has to be re-pasted into the Apps Script
+editor and redeployed:
+
+1. Open your Apps Script project at script.google.com.
+2. Replace `Code.gs`'s contents with the updated version from this repo.
+3. **Deploy → Manage deployments → click the pencil/edit icon on your
+   existing deployment → Version: New version → Deploy.** (Creating a
+   *new* deployment instead of a new version of the existing one would
+   change the `/exec` URL, breaking every link and saved config that
+   points at the old one — always edit the existing deployment.)
+
+Nothing on the frontend needs to change for this — `public/drive-config.json`
+still points at the same URL either way.
 
 ### Save exports the converted `.frag` version, not your original `.ifc`
 

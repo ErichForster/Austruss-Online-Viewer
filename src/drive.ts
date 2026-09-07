@@ -43,3 +43,44 @@ export async function listIfcFiles(): Promise<DriveFile[]> {
   if (!data.success) throw new Error(data.error || "Unknown error listing files");
   return data.files as DriveFile[];
 }
+
+export interface ModelOverride {
+  description?: string;
+  zone?: string;
+  drawingNumber?: string;
+  revision?: string;
+}
+
+export interface CatalogOverrides {
+  projects?: Record<string, string>;
+  models?: Record<string, ModelOverride>;
+}
+
+// Manual corrections made via the catalog's edit buttons — project name
+// overrides by job number, and per-model field overrides by filename —
+// stored as a small JSON file in the same Drive folder as the models
+// (catalog-overrides.json), so a fix is visible to everyone browsing the
+// catalog, not just saved in one person's browser.
+export async function getCatalogOverrides(): Promise<CatalogOverrides> {
+  const config = await loadDriveConfig();
+  const url = `${config.scriptUrl}?action=getOverrides&folderId=${encodeURIComponent(config.rootFolderId)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Backend error ${res.status}: ${res.statusText}`);
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || "Unknown error loading overrides");
+  return (data.overrides as CatalogOverrides) ?? {};
+}
+
+export async function saveCatalogOverrides(overrides: CatalogOverrides): Promise<void> {
+  const config = await loadDriveConfig();
+  const res = await fetch(config.scriptUrl, {
+    method: "POST",
+    // text/plain avoids a CORS preflight — see the comment in
+    // apps-script/Code.gs for the full story.
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ action: "saveOverrides", folderId: config.rootFolderId, overrides }),
+  });
+  if (!res.ok) throw new Error(`Backend error ${res.status}: ${res.statusText}`);
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || "Unknown error saving overrides");
+}

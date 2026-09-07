@@ -1,5 +1,13 @@
 import "./catalog.css";
-import { listIfcFiles, loadDriveConfig, isDriveConfigured, type DriveFile } from "./drive";
+import {
+  listIfcFiles,
+  loadDriveConfig,
+  isDriveConfigured,
+  getCatalogOverrides,
+  saveCatalogOverrides,
+  type DriveFile,
+  type CatalogOverrides,
+} from "./drive";
 import { parseModelFilename, type ParsedModelName } from "./naming";
 
 // Duplicated from icons.ts rather than imported — see the note further
@@ -12,6 +20,7 @@ const BEAM_ICON = `<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" st
 const SUN_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8 6 18M18 6l1.8-1.8"/></svg>`;
 const MOON_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5Z"/></svg>`;
 const CHEVRON_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>`;
+const PENCIL_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
 
 // Theme: read + apply before first paint to avoid a flash of the wrong theme.
 const THEME_KEY = "setout-theme";
@@ -63,6 +72,32 @@ app.innerHTML = `
       <button class="upload-btn" id="selection-open">Open together →</button>
       <button class="tool-btn" id="selection-clear">Clear</button>
     </div>
+    <div class="edit-popover" id="edit-popover" hidden>
+      <p class="edit-popover-hint" id="edit-popover-hint"></p>
+      <label class="edit-field-label" for="edit-project-name">Project name <span class="edit-field-note">(applies to the whole job)</span></label>
+      <input type="text" id="edit-project-name" class="edit-field-input" />
+      <div class="edit-field-row">
+        <div>
+          <label class="edit-field-label" for="edit-zone">Zone</label>
+          <input type="text" id="edit-zone" class="edit-field-input" />
+        </div>
+        <div>
+          <label class="edit-field-label" for="edit-drawing">Drawing #</label>
+          <input type="text" id="edit-drawing" class="edit-field-input" />
+        </div>
+        <div>
+          <label class="edit-field-label" for="edit-revision">Revision</label>
+          <input type="text" id="edit-revision" class="edit-field-input" />
+        </div>
+      </div>
+      <label class="edit-field-label" for="edit-description">Description</label>
+      <input type="text" id="edit-description" class="edit-field-input" />
+      <div class="edit-popover-actions">
+        <button class="tool-btn" id="edit-reset">Reset to filename</button>
+        <button class="tool-btn" id="edit-cancel">Cancel</button>
+        <button class="upload-btn" id="edit-save">Save</button>
+      </div>
+    </div>
   </div>
 `;
 
@@ -94,6 +129,11 @@ interface Entry {
 }
 
 let allEntries: Entry[] = [];
+// The manual corrections themselves — kept around (not just folded into
+// allEntries) so the edit form can be pre-filled with the current
+// override values, and so saving only has to send this small object
+// rather than reconstructing it from rendered entries.
+let currentOverrides: CatalogOverrides = {};
 // Persists which project groups are collapsed across re-renders (e.g. while
 // typing a search) — otherwise every filter change would silently re-expand
 // everything, undoing whatever the person just collapsed.
@@ -193,6 +233,18 @@ function render(entries: Entry[]) {
             <span class="model-open">Open →</span>
           `;
           row.appendChild(link);
+
+          const editBtn = document.createElement("button");
+          editBtn.className = "model-edit-btn external-hide";
+          editBtn.title = "Edit project name and details";
+          editBtn.innerHTML = PENCIL_ICON;
+          editBtn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openEditPopover(entry, editBtn);
+          });
+          row.appendChild(editBtn);
+
           zoneEl.appendChild(row);
         }
         content.appendChild(zoneEl);
@@ -236,6 +288,106 @@ selectionClearBtn.addEventListener("click", () => {
   applyFilter(); // re-render (respecting the current search) to uncheck every visible checkbox
 });
 
+// --- Edit popover: corrects a model's project name / zone / description /
+// drawing number / revision when the naming convention imported something
+// wrong. Saved to catalog-overrides.json in the Drive folder (via the
+// Apps Script backend) so the fix is visible to everyone browsing the
+// catalog, not just kept in this browser.
+const editPopover = document.getElementById("edit-popover")!;
+const editHint = document.getElementById("edit-popover-hint")!;
+const editProjectName = document.getElementById("edit-project-name") as HTMLInputElement;
+const editZone = document.getElementById("edit-zone") as HTMLInputElement;
+const editDrawing = document.getElementById("edit-drawing") as HTMLInputElement;
+const editRevision = document.getElementById("edit-revision") as HTMLInputElement;
+const editDescription = document.getElementById("edit-description") as HTMLInputElement;
+const editResetBtn = document.getElementById("edit-reset") as HTMLButtonElement;
+const editCancelBtn = document.getElementById("edit-cancel") as HTMLButtonElement;
+const editSaveBtn = document.getElementById("edit-save") as HTMLButtonElement;
+
+let editingEntry: Entry | null = null;
+
+function positionEditPopover(anchor: HTMLElement) {
+  const rect = anchor.getBoundingClientRect();
+  const width = editPopover.offsetWidth || 300;
+  let left = rect.right - width;
+  left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
+  let top = rect.bottom + 6;
+  const height = editPopover.offsetHeight || 320;
+  if (top + height > window.innerHeight - 8) top = Math.max(8, rect.top - height - 6);
+  editPopover.style.left = `${left}px`;
+  editPopover.style.top = `${top}px`;
+}
+
+function openEditPopover(entry: Entry, anchor: HTMLElement) {
+  editingEntry = entry;
+  editHint.textContent = `Editing ${entry.file.name}`;
+  editProjectName.value = entry.projectName;
+  editZone.value = entry.parsed.zone;
+  editDrawing.value = entry.parsed.drawingNumber;
+  editRevision.value = entry.parsed.revision ?? "";
+  editDescription.value = entry.parsed.description;
+  editPopover.hidden = false;
+  positionEditPopover(anchor);
+}
+function closeEditPopover() {
+  editPopover.hidden = true;
+  editingEntry = null;
+}
+editPopover.addEventListener("click", (e) => e.stopPropagation());
+document.addEventListener("click", () => closeEditPopover());
+editCancelBtn.addEventListener("click", closeEditPopover);
+
+editResetBtn.addEventListener("click", () => {
+  if (!editingEntry) return;
+  const original = parseModelFilename(editingEntry.file.name);
+  if (!original) return;
+  editZone.value = original.zone;
+  editDrawing.value = original.drawingNumber;
+  editRevision.value = original.revision ?? "";
+  editDescription.value = original.description;
+});
+
+editSaveBtn.addEventListener("click", async () => {
+  if (!editingEntry) return;
+  const jobNumber = editingEntry.parsed.jobNumber;
+  const filename = editingEntry.file.name;
+
+  const projects = { ...(currentOverrides.projects ?? {}) };
+  const trimmedName = editProjectName.value.trim();
+  if (trimmedName) projects[jobNumber] = trimmedName;
+  else delete projects[jobNumber];
+
+  const models = { ...(currentOverrides.models ?? {}) };
+  models[filename] = {
+    zone: editZone.value.trim(),
+    drawingNumber: editDrawing.value.trim(),
+    revision: editRevision.value.trim() || undefined,
+    description: editDescription.value.trim(),
+  };
+
+  const updated: CatalogOverrides = { projects, models };
+  editSaveBtn.disabled = true;
+  editSaveBtn.textContent = "Saving…";
+  try {
+    await saveCatalogOverrides(updated);
+    currentOverrides = updated;
+    allEntries = buildEntries();
+    closeEditPopover();
+    applyFilter();
+  } catch (err) {
+    showEditError(err instanceof Error ? err.message : "Unknown error");
+  } finally {
+    editSaveBtn.disabled = false;
+    editSaveBtn.textContent = "Save";
+  }
+});
+
+function showEditError(message: string) {
+  editHint.textContent = `Couldn't save: ${message}`;
+  editHint.classList.add("edit-popover-error");
+  setTimeout(() => editHint.classList.remove("edit-popover-error"), 4000);
+}
+
 function applyFilter() {
   const q = searchEl.value.trim().toLowerCase();
   if (!q) {
@@ -252,6 +404,38 @@ function applyFilter() {
 searchEl.addEventListener("input", applyFilter);
 showCompletedEl.addEventListener("change", applyFilter);
 
+type ProjectsMap = Record<string, string | { name: string; status?: ProjectStatus }>;
+let allFiles: DriveFile[] = [];
+let projectsMap: ProjectsMap = {};
+
+// Combines the raw file listing + projects.json + the editable overrides
+// into the rendered entry list. Pulled out of init() so an edit-save can
+// rebuild the list from what's already in memory instead of a full
+// re-fetch from Drive.
+function buildEntries(): Entry[] {
+  let entries = allFiles
+    .map((file) => {
+      const parsed = parseModelFilename(file.name);
+      if (!parsed) return null;
+      const modelOverride = currentOverrides.models?.[file.name];
+      const effectiveParsed: ParsedModelName = modelOverride ? { ...parsed, ...modelOverride } : parsed;
+      const projectEntry = projectsMap[parsed.jobNumber];
+      const projectName =
+        currentOverrides.projects?.[parsed.jobNumber] ??
+        (typeof projectEntry === "string" ? projectEntry : projectEntry?.name) ??
+        `Job ${parsed.jobNumber}`;
+      const jobStatus: ProjectStatus =
+        typeof projectEntry === "object" && projectEntry?.status === "complete" ? "complete" : "active";
+      return { parsed: effectiveParsed, file, projectName, jobStatus };
+    })
+    .filter((e): e is Entry => e !== null);
+
+  if (isExternalMode && externalJob) {
+    entries = entries.filter((e) => e.parsed.jobNumber === externalJob);
+  }
+  return entries;
+}
+
 async function init() {
   const config = await loadDriveConfig().catch(() => null);
   if (!config || !isDriveConfigured(config)) {
@@ -264,30 +448,17 @@ Edit public/drive-config.json with your Apps Script deployment URL and your Driv
   // projects.json entries can be either a plain string (legacy — just a
   // name, treated as active) or {name, status}, so existing simple entries
   // keep working without editing every line to adopt the status field.
-  let projects: Record<string, string | { name: string; status?: ProjectStatus }> = {};
   try {
     const res = await fetch(`${import.meta.env.BASE_URL}projects.json`);
-    if (res.ok) projects = await res.json();
+    if (res.ok) projectsMap = await res.json();
   } catch {
     // Manifest is optional — falls back to "Job <number>" labels below.
   }
 
   try {
-    const files = await listIfcFiles();
-    allEntries = files
-      .map((file) => {
-        const parsed = parseModelFilename(file.name);
-        if (!parsed) return null;
-        const entry = projects[parsed.jobNumber];
-        const projectName = (typeof entry === "string" ? entry : entry?.name) ?? `Job ${parsed.jobNumber}`;
-        const jobStatus: ProjectStatus = (typeof entry === "object" && entry?.status === "complete") ? "complete" : "active";
-        return { parsed, file, projectName, jobStatus };
-      })
-      .filter((e): e is Entry => e !== null);
-
-    if (isExternalMode && externalJob) {
-      allEntries = allEntries.filter((e) => e.parsed.jobNumber === externalJob);
-    }
+    currentOverrides = await getCatalogOverrides().catch(() => ({}));
+    allFiles = await listIfcFiles();
+    allEntries = buildEntries();
 
     if (!allEntries.length) {
       bodyEl.innerHTML = isExternalMode

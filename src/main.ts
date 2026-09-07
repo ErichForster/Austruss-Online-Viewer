@@ -62,7 +62,11 @@ const app = document.getElementById("app")!;
 app.innerHTML = `
   <div class="shell">
     <header class="topbar">
-      <div class="wordmark"><img class="brand-mark" src="${import.meta.env.BASE_URL}brand/austruss-icon.png" alt="Austruss" /><span class="wordmark-text">Austruss Online Viewer</span></div>
+      ${
+        isExternalMode
+          ? `<div class="wordmark"><img class="brand-mark" src="${import.meta.env.BASE_URL}brand/austruss-icon.png" alt="Austruss" /><span class="wordmark-text">Austruss Online Viewer</span></div>`
+          : `<a class="wordmark" href="${import.meta.env.BASE_URL}index.html" title="Back to a blank viewer"><img class="brand-mark" src="${import.meta.env.BASE_URL}brand/austruss-icon.png" alt="Austruss" /><span class="wordmark-text">Austruss Online Viewer</span></a>`
+      }
       <a class="nav-link" href="${isExternalMode ? `${import.meta.env.BASE_URL}catalog.html?external=1&job=${encodeURIComponent(externalJob ?? "")}` : `${import.meta.env.BASE_URL}catalog.html`}" title="${isExternalMode ? "View other models in this project" : "Browse saved models"}">${icon.showAll}<span class="nav-link-text">${isExternalMode ? "Other zones" : "Browse models"}</span></a>
       <span class="filename" id="filename"></span>
       <div class="toolbar">
