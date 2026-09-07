@@ -128,11 +128,11 @@ app.innerHTML = `
                   </div>
                   <div>
                     <label class="save-naming-label" for="save-product">Product</label>
-                    <input type="text" id="save-product" class="save-naming-input" value="LGS" />
+                    <input type="text" id="save-product" class="save-naming-input save-naming-input-upper" value="LGS" />
                   </div>
                   <div>
                     <label class="save-naming-label" for="save-zone">Zone</label>
-                    <input type="text" id="save-zone" class="save-naming-input" />
+                    <input type="text" id="save-zone" class="save-naming-input save-naming-input-upper" />
                   </div>
                   <div>
                     <label class="save-naming-label" for="save-drawing">Drawing #</label>
@@ -1315,15 +1315,48 @@ saveConfirmBtn.addEventListener("click", async () => {
     // from the fields instead of re-checking the (still non-matching)
     // typed text.
     const job = saveJobInput.value.trim();
-    const product = saveProductInput.value.trim();
-    const zone = saveZoneInput.value.trim();
+    const product = saveProductInput.value.trim().toUpperCase();
+    const zone = saveZoneInput.value.trim().toUpperCase();
     const drawing = saveDrawingInput.value.trim();
     if (!job || !product || !zone || !drawing) {
       showError("Fill in all four fields — Job, Product, Zone, and Drawing # are all required.");
       return;
     }
+    // Match the exact shape the catalog's own parser requires, and say
+    // specifically which field is the problem rather than a generic
+    // failure — the previous version built the name from whatever was
+    // typed with no check at all, so a field like "House" (mixed case)
+    // silently produced a name that still wouldn't parse, uploading fine
+    // but staying invisible in the catalog.
+    if (!/^\d{3,6}$/.test(job)) {
+      showError("Job # should be 3–6 digits, with no letters or symbols.");
+      saveJobInput.focus();
+      return;
+    }
+    if (!/^[A-Z]+$/.test(product)) {
+      showError("Product should be letters only, with no digits or symbols.");
+      saveProductInput.focus();
+      return;
+    }
+    if (!/^[A-Z0-9]+$/.test(zone)) {
+      showError("Zone should be letters and/or numbers only, with no spaces or symbols.");
+      saveZoneInput.focus();
+      return;
+    }
+    if (!/^\d+$/.test(drawing)) {
+      showError("Drawing # should be digits only, with no letters or symbols.");
+      saveDrawingInput.focus();
+      return;
+    }
     const description = typed.replace(/\.(ifc|frag)$/i, "").replace(/[^a-zA-Z0-9]+/g, "_");
     const finalName = `${job}-${product}-${zone}-${drawing}_${description}.frag`;
+    // Belt-and-braces: re-check the name this actually builds against the
+    // real parser, rather than trusting the field-level checks above are
+    // exhaustive. Saving should never happen without this passing.
+    if (!parseModelFilename(finalName)) {
+      showError("That still doesn't produce a valid name — double check each field above.");
+      return;
+    }
     saveFilenameInput.value = finalName;
     saveNamingFields.hidden = true;
     saveToDrive(finalName, projectName);

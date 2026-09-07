@@ -259,6 +259,13 @@
   padding: 0 8px;
 }
 
+/* Visual cue only — Product/Zone get uppercased for real at save time
+   regardless of what's typed, this just shows what will actually be
+   saved without fighting the person's cursor position while they type. */
+.save-naming-input-upper {
+  text-transform: uppercase;
+}
+
 .save-result {
   font-size: 11.5px;
   color: var(--text-secondary);
