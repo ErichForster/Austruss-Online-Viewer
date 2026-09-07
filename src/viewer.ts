@@ -394,6 +394,17 @@ export class IfcViewer {
     await this.fragments.core.update(true);
   }
 
+  // The inverse of isolate: hides just the given elements, leaving
+  // everything else as it was — including anything already hidden by an
+  // earlier hide() call, which is why this doesn't reset visibility
+  // first the way isolate() does. "Show all" undoes both.
+  async hide(modelId: string, localIds: number[]) {
+    const model = this.fragments.list.get(modelId);
+    if (!model) return;
+    await model.setVisible(localIds, false);
+    await this.fragments.core.update(true);
+  }
+
   async showAll() {
     for (const model of this.fragments.list.values()) {
       await model.resetVisible();

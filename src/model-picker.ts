@@ -64,22 +64,103 @@ function loadProjectsMap(): Promise<ProjectsMap> {
   return projectsCache;
 }
 
-function resolveProjectName(projects: ProjectsMap, jobNumber: string): string {
+interface DriveConfig {
+  scriptUrl: string;
+  rootFolderId: string;
+}
+let driveConfigCache: Promise<DriveConfig> | null = null;
+function loadDriveConfig(): Promise<DriveConfig> {
+  if (!driveConfigCache) {
+    driveConfigCache = fetch(`${import.meta.env.BASE_URL}drive-config.json`).then((r) => r.json());
+  }
+  return driveConfigCache;
+}
+
+// The catalog's manual corrections (project names, per-model field
+// overrides) — same catalog-overrides.json file the catalog page reads
+// and writes, duplicated here for the same reason as the rest of this
+// module (see the file-level comment). Consulted so an edited project
+// name shows up consistently in the viewer too, not just the catalog.
+type CatalogOverrides = {
+  projects?: ProjectsMap;
+  models?: Record<string, unknown>;
+};
+let overridesCache: Promise<CatalogOverrides> | null = null;
+function loadOverridesMap(): Promise<CatalogOverrides> {
+  if (!overridesCache) {
+    overridesCache = loadDriveConfig()
+      .then((config) => {
+        if (!config.scriptUrl || !config.rootFolderId) return {};
+        return fetch(`${config.scriptUrl}?action=getOverrides&folderId=${encodeURIComponent(config.rootFolderId)}`)
+          .then((r) => r.json())
+          .then((d) => (d.success ? (d.overrides as CatalogOverrides) ?? {} : {}));
+      })
+      .catch(() => ({}));
+  }
+  return overridesCache;
+}
+
+function resolveProjectName(projects: ProjectsMap, overrides: CatalogOverrides, jobNumber: string): string {
+  const overrideEntry = overrides.projects?.[jobNumber];
+  const overrideName = typeof overrideEntry === "string" ? overrideEntry : overrideEntry?.name;
+  if (overrideName) return overrideName;
   const entry = projects[jobNumber];
   const name = typeof entry === "string" ? entry : entry?.name;
   return name ?? `Job ${jobNumber}`;
+}
+
+// The known project name for a job number, or null if nothing's actually
+// been set for it yet (as opposed to the "Job <number>" fallback used for
+// *display* — this is used to decide whether to pre-fill the Save dialog's
+// project name field, where a fabricated fallback would be actively
+// misleading to pre-fill and then silently save back as if it were real).
+export async function getKnownProjectName(jobNumber: string): Promise<string | null> {
+  const [projects, overrides] = await Promise.all([loadProjectsMap(), loadOverridesMap()]);
+  const overrideEntry = overrides.projects?.[jobNumber];
+  const overrideName = typeof overrideEntry === "string" ? overrideEntry : overrideEntry?.name;
+  if (overrideName) return overrideName;
+  const jsonEntry = projects[jobNumber];
+  const jsonName = typeof jsonEntry === "string" ? jsonEntry : jsonEntry?.name;
+  return jsonName ?? null;
+}
+
+// Saves a project name correction the same way the catalog's edit popup
+// does — into catalog-overrides.json via the Apps Script backend, so it's
+// visible to everyone browsing the catalog, not just this browser.
+export async function saveProjectNameOverride(jobNumber: string, name: string): Promise<void> {
+  const config = await loadDriveConfig();
+  if (!config.scriptUrl || !config.rootFolderId) {
+    throw new Error("Google Drive isn't configured — see README.md \"Google Drive setup\".");
+  }
+  const overrides = await loadOverridesMap();
+  const projects = { ...(overrides.projects ?? {}) };
+  const existing = projects[jobNumber];
+  const existingStatus = typeof existing === "object" ? existing.status : undefined;
+  projects[jobNumber] = { name, status: existingStatus };
+  const updated: CatalogOverrides = { ...overrides, projects };
+
+  const res = await fetch(config.scriptUrl, {
+    method: "POST",
+    // text/plain avoids a CORS preflight — see the comment in
+    // apps-script/Code.gs for the full story.
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify({ action: "saveOverrides", folderId: config.rootFolderId, overrides: updated }),
+  });
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error || "Unknown error saving the project name");
+  overridesCache = Promise.resolve(updated); // keep the cache in sync
 }
 
 // Fetches the same drive-config.json / project catalog the main catalog
 // page uses, and returns a flat, parsed, project-labelled list ready to
 // group and render.
 export async function fetchDriveModels(): Promise<PickerGroups> {
-  const config = await fetch(`${import.meta.env.BASE_URL}drive-config.json`).then((r) => r.json());
+  const config = await loadDriveConfig();
   if (!config.scriptUrl || config.scriptUrl.startsWith("REPLACE_") || !config.rootFolderId) {
     throw new Error("Google Drive isn't configured yet — see README.md \"Google Drive setup\".");
   }
 
-  const projects = await loadProjectsMap();
+  const [projects, overrides] = await Promise.all([loadProjectsMap(), loadOverridesMap()]);
 
   const url = `${config.scriptUrl}?action=list&folderId=${encodeURIComponent(config.rootFolderId)}`;
   const res = await fetch(url);
@@ -91,7 +172,7 @@ export async function fetchDriveModels(): Promise<PickerGroups> {
   for (const file of data.files as DriveFile[]) {
     const parsed = parseModelFilename(file.name);
     if (!parsed) continue;
-    entries.push({ file, parsed, projectName: resolveProjectName(projects, parsed.jobNumber) });
+    entries.push({ file, parsed, projectName: resolveProjectName(projects, overrides, parsed.jobNumber) });
   }
   return { entries, scriptUrl: config.scriptUrl };
 }
@@ -104,8 +185,8 @@ export async function fetchDriveModels(): Promise<PickerGroups> {
 export async function formatModelLabel(filename: string): Promise<string> {
   const parsed = parseModelFilename(filename);
   if (!parsed) return filename;
-  const projects = await loadProjectsMap();
-  const projectName = resolveProjectName(projects, parsed.jobNumber);
+  const [projects, overrides] = await Promise.all([loadProjectsMap(), loadOverridesMap()]);
+  const projectName = resolveProjectName(projects, overrides, parsed.jobNumber);
   return `Job ${parsed.jobNumber} — ${projectName} — Zone ${parsed.zone}`;
 }
 

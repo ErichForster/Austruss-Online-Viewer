@@ -52,7 +52,10 @@ export interface ModelOverride {
 }
 
 export interface CatalogOverrides {
-  projects?: Record<string, string>;
+  // string is the older/simpler shape (name only, from before project
+  // status could be set here) — still read for backward compatibility,
+  // but the app always writes the object shape going forward.
+  projects?: Record<string, string | { name?: string; status?: "active" | "complete" }>;
   models?: Record<string, ModelOverride>;
 }
 

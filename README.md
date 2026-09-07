@@ -60,8 +60,10 @@ unless you're testing a Pages-path build locally
 - **Selection info pin** — selecting an element (canvas click or tree)
   shows a small pin with its Name and Frame name, anchored to the
   element's actual center and following the camera as you orbit
-- **Isolate / show all** — hide everything except the current selection,
-  or reset visibility
+- **Isolate / Hide / Show all** — Isolate hides everything except the
+  current selection; Hide is the inverse, hiding just the selected
+  element while leaving everything else visible (stacks — hiding several
+  elements one at a time keeps them all hidden); Show all resets both
 - **Multi-model overlay — currently disabled.** The code is all still
   here (tree groups, coordination alignment, Sessions, Browse Drive,
   catalog multi-select) but the entry points are hidden pending a bug fix
@@ -97,6 +99,13 @@ unless you're testing a Pages-path build locally
   doesn't match the naming convention, Save to Drive prompts for the
   missing Job/Product/Zone/Drawing pieces before saving, rather than
   silently uploading something the catalog will never be able to find.
+  Project name is always asked for too, even when the rest of the name
+  already matches the convention — it's saved as a `catalog-overrides.json`
+  entry the same way the catalog's own edit popup does, so a brand-new
+  job number doesn't sit as "Job `<number>`" until someone notices and
+  fixes it later. Pre-fills with the name already on record when one
+  exists, left blank otherwise (never pre-filled with the "Job `<number>`"
+  placeholder itself, since that isn't a real name to silently re-save).
   A successful single-model save shows the file's Drive share link
   directly in the popover
 - Light/dark theme toggle, persisted across visits — defaults to light on
@@ -208,12 +217,17 @@ an object with a `status`:
   "24098": { "name": "Old Job", "status": "complete" }
 }
 ```
-A `"complete"` job is hidden from the catalog's default view (collapsible
-project groups, click the header to expand/collapse) but stays fully
+A `"complete"` job is hidden from the catalog's default view (project
+groups all start collapsed — click a header to expand one, or use
+"Expand all" / "Collapse all" in the toolbar) but stays fully
 searchable — typing anything into the search box, or ticking "Show
-completed", brings it back. There's no in-app way to change a project's
-status; it's set by editing this file and pushing, same as adding a new
-job number.
+completed", brings it back.
+
+Status can be set two ways now: editing this file directly (as above),
+or the Active/Complete toggle in a model's edit popup on the catalog
+page (see "Correcting a bad import" below) — that one writes to
+`catalog-overrides.json` instead, and takes precedence over whatever's
+in this file if both set a status for the same job.
 
 Files that don't match the pattern at all are silently skipped by the
 catalog (they won't crash it, they just won't show up) — worth checking
@@ -225,9 +239,9 @@ expect to see isn't appearing.
 Each model row has a small pencil/edit button (hidden in external mode —
 see below) for fixing a project name or per-model field that parsed
 wrong, without renaming the actual file in Drive or hand-editing
-`projects.json`. It covers: project name (applies to every model under
-that job number, not just the one you clicked), zone, drawing number,
-revision, and description.
+`projects.json`. It covers: project name and Active/Complete status
+(both apply to every model under that job number, not just the one you
+clicked), zone, drawing number, revision, and description.
 
 These corrections are saved to a `catalog-overrides.json` file the
 backend creates in your Drive folder — not `projects.json`, and not this

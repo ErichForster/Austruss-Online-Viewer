@@ -61,6 +61,8 @@ app.innerHTML = `
         <input type="checkbox" id="show-completed" />
         Show completed
       </label>
+      <button class="collapse-toggle-btn" id="expand-all-btn" title="Expand every project group">Expand all</button>
+      <button class="collapse-toggle-btn" id="collapse-all-btn" title="Collapse every project group">Collapse all</button>
       <span class="catalog-count" id="count"></span>
       <button class="theme-toggle" id="theme-toggle" title="Toggle light/dark theme"></button>
     </header>
@@ -76,6 +78,11 @@ app.innerHTML = `
       <p class="edit-popover-hint" id="edit-popover-hint"></p>
       <label class="edit-field-label" for="edit-project-name">Project name <span class="edit-field-note">(applies to the whole job)</span></label>
       <input type="text" id="edit-project-name" class="edit-field-input" />
+      <label class="edit-field-label">Project status <span class="edit-field-note">(applies to the whole job)</span></label>
+      <div class="edit-status-row">
+        <label class="edit-status-option"><input type="radio" name="edit-status" id="edit-status-active" value="active" /> Active</label>
+        <label class="edit-status-option"><input type="radio" name="edit-status" id="edit-status-complete" value="complete" /> Complete</label>
+      </div>
       <div class="edit-field-row">
         <div>
           <label class="edit-field-label" for="edit-zone">Zone</label>
@@ -134,13 +141,16 @@ let allEntries: Entry[] = [];
 // override values, and so saving only has to send this small object
 // rather than reconstructing it from rendered entries.
 let currentOverrides: CatalogOverrides = {};
-// Persists which project groups are collapsed across re-renders (e.g. while
-// typing a search) — otherwise every filter change would silently re-expand
-// everything, undoing whatever the person just collapsed.
-const collapsedJobs = new Set<string>();
+// Persists which project groups are expanded across re-renders (e.g.
+// while typing a search) — otherwise every filter change would silently
+// re-expand or re-collapse everything, undoing whatever the person just
+// clicked. Tracking "expanded" (rather than "collapsed") means new
+// projects — the first time they're seen, e.g. after a search — start
+// collapsed by default without needing to pre-populate anything.
+const expandedJobs = new Set<string>();
 // Models checked for opening together — keyed by Drive file ID so it
 // survives re-renders (e.g. while typing a search) the same way
-// collapsedJobs does.
+// expandedJobs does.
 const selectedIds = new Map<string, Entry>();
 
 function escapeHtml(input: string): string {
@@ -181,7 +191,7 @@ function render(entries: Entry[]) {
     for (const [jobNumber, { status, zones }] of [...byJob.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
       const group = document.createElement("section");
       group.className = "project-group";
-      const collapsed = collapsedJobs.has(jobNumber);
+      const collapsed = !expandedJobs.has(jobNumber);
 
       const header = document.createElement("div");
       header.className = "project-header";
@@ -255,8 +265,8 @@ function render(entries: Entry[]) {
         const nowCollapsed = content.style.display !== "none";
         content.style.display = nowCollapsed ? "none" : "block";
         header.querySelector(".project-caret")!.classList.toggle("open", !nowCollapsed);
-        if (nowCollapsed) collapsedJobs.add(jobNumber);
-        else collapsedJobs.delete(jobNumber);
+        if (nowCollapsed) expandedJobs.delete(jobNumber);
+        else expandedJobs.add(jobNumber);
       });
 
       bodyEl.appendChild(group);
@@ -296,6 +306,8 @@ selectionClearBtn.addEventListener("click", () => {
 const editPopover = document.getElementById("edit-popover")!;
 const editHint = document.getElementById("edit-popover-hint")!;
 const editProjectName = document.getElementById("edit-project-name") as HTMLInputElement;
+const editStatusActive = document.getElementById("edit-status-active") as HTMLInputElement;
+const editStatusComplete = document.getElementById("edit-status-complete") as HTMLInputElement;
 const editZone = document.getElementById("edit-zone") as HTMLInputElement;
 const editDrawing = document.getElementById("edit-drawing") as HTMLInputElement;
 const editRevision = document.getElementById("edit-revision") as HTMLInputElement;
@@ -322,6 +334,8 @@ function openEditPopover(entry: Entry, anchor: HTMLElement) {
   editingEntry = entry;
   editHint.textContent = `Editing ${entry.file.name}`;
   editProjectName.value = entry.projectName;
+  editStatusActive.checked = entry.jobStatus === "active";
+  editStatusComplete.checked = entry.jobStatus === "complete";
   editZone.value = entry.parsed.zone;
   editDrawing.value = entry.parsed.drawingNumber;
   editRevision.value = entry.parsed.revision ?? "";
@@ -354,8 +368,12 @@ editSaveBtn.addEventListener("click", async () => {
 
   const projects = { ...(currentOverrides.projects ?? {}) };
   const trimmedName = editProjectName.value.trim();
-  if (trimmedName) projects[jobNumber] = trimmedName;
-  else delete projects[jobNumber];
+  const status: ProjectStatus = editStatusComplete.checked ? "complete" : "active";
+  if (trimmedName || status === "complete") {
+    projects[jobNumber] = { name: trimmedName || undefined, status };
+  } else {
+    delete projects[jobNumber];
+  }
 
   const models = { ...(currentOverrides.models ?? {}) };
   models[filename] = {
@@ -404,6 +422,17 @@ function applyFilter() {
 searchEl.addEventListener("input", applyFilter);
 showCompletedEl.addEventListener("change", applyFilter);
 
+const expandAllBtn = document.getElementById("expand-all-btn") as HTMLButtonElement;
+const collapseAllBtn = document.getElementById("collapse-all-btn") as HTMLButtonElement;
+expandAllBtn.addEventListener("click", () => {
+  for (const entry of allEntries) expandedJobs.add(entry.parsed.jobNumber);
+  applyFilter();
+});
+collapseAllBtn.addEventListener("click", () => {
+  expandedJobs.clear();
+  applyFilter();
+});
+
 type ProjectsMap = Record<string, string | { name: string; status?: ProjectStatus }>;
 let allFiles: DriveFile[] = [];
 let projectsMap: ProjectsMap = {};
@@ -419,13 +448,17 @@ function buildEntries(): Entry[] {
       if (!parsed) return null;
       const modelOverride = currentOverrides.models?.[file.name];
       const effectiveParsed: ParsedModelName = modelOverride ? { ...parsed, ...modelOverride } : parsed;
-      const projectEntry = projectsMap[parsed.jobNumber];
-      const projectName =
-        currentOverrides.projects?.[parsed.jobNumber] ??
-        (typeof projectEntry === "string" ? projectEntry : projectEntry?.name) ??
-        `Job ${parsed.jobNumber}`;
-      const jobStatus: ProjectStatus =
-        typeof projectEntry === "object" && projectEntry?.status === "complete" ? "complete" : "active";
+
+      const overrideEntry = currentOverrides.projects?.[parsed.jobNumber];
+      const overrideName = typeof overrideEntry === "string" ? overrideEntry : overrideEntry?.name;
+      const overrideStatus = typeof overrideEntry === "object" ? overrideEntry?.status : undefined;
+
+      const jsonEntry = projectsMap[parsed.jobNumber];
+      const jsonName = typeof jsonEntry === "string" ? jsonEntry : jsonEntry?.name;
+      const jsonStatus = typeof jsonEntry === "object" ? jsonEntry?.status : undefined;
+
+      const projectName = overrideName ?? jsonName ?? `Job ${parsed.jobNumber}`;
+      const jobStatus: ProjectStatus = overrideStatus ?? jsonStatus ?? "active";
       return { parsed: effectiveParsed, file, projectName, jobStatus };
     })
     .filter((e): e is Entry => e !== null);

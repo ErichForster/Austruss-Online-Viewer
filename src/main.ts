@@ -73,6 +73,7 @@ app.innerHTML = `
         <button class="tool-btn" id="btn-fit" title="Fit view" disabled>${icon.fit}Fit</button>
         <div class="tool-sep"></div>
         <button class="tool-btn" id="btn-isolate" title="Isolate selection" disabled>${icon.isolate}Isolate</button>
+        <button class="tool-btn" id="btn-hide" title="Hide the selected element only, leaving everything else visible" disabled>${icon.hide}Hide</button>
         <button class="tool-btn" id="btn-show-all" title="Show all" disabled>${icon.showAll}Show all</button>
         <div class="tool-sep desktop-only"></div>
         <button class="tool-btn desktop-only external-hide" id="btn-pivot" title="Click a point on the model to set it as the orbit center" disabled>${icon.pivot}Set pivot</button>
@@ -116,13 +117,27 @@ app.innerHTML = `
             <div class="save-picker-body">
               <label class="save-picker-label" for="save-filename">File name</label>
               <input type="text" id="save-filename" class="save-filename-input" />
+              <label class="save-picker-label" for="save-project-name">Project name</label>
+              <input type="text" id="save-project-name" class="save-filename-input" placeholder="e.g. Lennox Head" />
               <div class="save-naming-fields" id="save-naming-fields" hidden>
                 <p class="save-naming-hint">That name doesn't match the required format (Job-Product-Zone-Drawing) — the catalog won't be able to find it. Fill these in and hit Save again:</p>
                 <div class="save-naming-row">
-                  <input type="text" id="save-job" placeholder="Job #" class="save-naming-input" />
-                  <input type="text" id="save-product" placeholder="Product" class="save-naming-input" value="LGS" />
-                  <input type="text" id="save-zone" placeholder="Zone" class="save-naming-input" />
-                  <input type="text" id="save-drawing" placeholder="Drawing #" class="save-naming-input" />
+                  <div>
+                    <label class="save-naming-label" for="save-job">Job #</label>
+                    <input type="text" id="save-job" class="save-naming-input" />
+                  </div>
+                  <div>
+                    <label class="save-naming-label" for="save-product">Product</label>
+                    <input type="text" id="save-product" class="save-naming-input" value="LGS" />
+                  </div>
+                  <div>
+                    <label class="save-naming-label" for="save-zone">Zone</label>
+                    <input type="text" id="save-zone" class="save-naming-input" />
+                  </div>
+                  <div>
+                    <label class="save-naming-label" for="save-drawing">Drawing #</label>
+                    <input type="text" id="save-drawing" class="save-naming-input" />
+                  </div>
                 </div>
               </div>
               <div class="save-picker-actions">
@@ -252,6 +267,7 @@ const selectionPinName = $("selection-pin-name");
 const selectionPinFrame = $("selection-pin-frame");
 const btnFit = $<HTMLButtonElement>("btn-fit");
 const btnIsolate = $<HTMLButtonElement>("btn-isolate");
+const btnHide = $<HTMLButtonElement>("btn-hide");
 const btnShowAll = $<HTMLButtonElement>("btn-show-all");
 const btnPivot = $<HTMLButtonElement>("btn-pivot");
 const btnLocations = $<HTMLButtonElement>("btn-locations");
@@ -267,6 +283,7 @@ const btnSave = $<HTMLButtonElement>("btn-save");
 const btnSaveLocal = $<HTMLButtonElement>("btn-save-local");
 const savePicker = $("save-picker");
 const saveFilenameInput = $<HTMLInputElement>("save-filename");
+const saveProjectNameInput = $<HTMLInputElement>("save-project-name");
 const saveNamingFields = $("save-naming-fields");
 const saveJobInput = $<HTMLInputElement>("save-job");
 const saveProductInput = $<HTMLInputElement>("save-product");
@@ -441,6 +458,7 @@ function hidePin() {
 viewer.onSelect = async (info) => {
   currentSelection = info;
   btnIsolate.disabled = !info;
+  btnHide.disabled = !info;
   if (!info) {
     renderProperties(propsRoot, null);
     hidePin();
@@ -1035,6 +1053,10 @@ btnIsolate.addEventListener("click", () => {
   if (!currentSelection) return;
   viewer.isolate(currentSelection.modelId, [currentSelection.localId]);
 });
+btnHide.addEventListener("click", () => {
+  if (!currentSelection) return;
+  viewer.hide(currentSelection.modelId, [currentSelection.localId]);
+});
 
 // --- Set pivot: arm on click, consume the next canvas click, then disarm ---
 let pivotArmed = false;
@@ -1236,7 +1258,7 @@ btnSaveLocal.addEventListener("click", async () => {
 });
 
 // --- Save to Drive popover ---
-btnSave.addEventListener("click", (e) => {
+btnSave.addEventListener("click", async (e) => {
   e.stopPropagation();
   bgPicker.hidden = true;
   locationsPicker.hidden = true;
@@ -1252,7 +1274,20 @@ btnSave.addEventListener("click", (e) => {
   saveNamingFields.hidden = true;
   saveResultEl.hidden = true;
   savePicker.hidden = !savePicker.hidden;
-  if (!savePicker.hidden) saveFilenameInput.focus();
+  if (!savePicker.hidden) {
+    saveFilenameInput.focus();
+    // Pre-fill the project name if one's already known — left blank
+    // rather than showing a "Job <number>" fallback, since that's a
+    // display convenience, not a real name, and pre-filling it would
+    // silently save the fallback as if it were the actual answer.
+    saveProjectNameInput.value = "";
+    const { parseModelFilename, getKnownProjectName } = await import("./model-picker");
+    const parsed = parseModelFilename(saveFilenameInput.value);
+    if (parsed) {
+      const known = await getKnownProjectName(parsed.jobNumber);
+      if (known) saveProjectNameInput.value = known;
+    }
+  }
 });
 savePicker.addEventListener("click", (e) => e.stopPropagation());
 saveCancelBtn.addEventListener("click", () => {
@@ -1261,6 +1296,18 @@ saveCancelBtn.addEventListener("click", () => {
 saveConfirmBtn.addEventListener("click", async () => {
   const { parseModelFilename } = await import("./model-picker");
   const typed = saveFilenameInput.value.trim();
+  const projectName = saveProjectNameInput.value.trim();
+
+  // Required regardless of whether the filename itself already matches
+  // the naming convention — project name isn't derivable from the
+  // filename at all, so even a perfectly-formed name would otherwise
+  // leave a brand-new job number showing as "Job <number>" until someone
+  // notices and fixes it later via the catalog.
+  if (!projectName) {
+    showError("Project name is required — the catalog can't show a job under just its number.");
+    saveProjectNameInput.focus();
+    return;
+  }
 
   if (!saveNamingFields.hidden) {
     // Second click: the naming fields are already showing, meaning the
@@ -1279,7 +1326,7 @@ saveConfirmBtn.addEventListener("click", async () => {
     const finalName = `${job}-${product}-${zone}-${drawing}_${description}.frag`;
     saveFilenameInput.value = finalName;
     saveNamingFields.hidden = true;
-    saveToDrive(finalName);
+    saveToDrive(finalName, projectName);
     return;
   }
 
@@ -1290,7 +1337,7 @@ saveConfirmBtn.addEventListener("click", async () => {
   }
 
   saveResultEl.hidden = true;
-  saveToDrive(typed);
+  saveToDrive(typed, projectName);
 });
 saveFilenameInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") saveConfirmBtn.click();
@@ -1352,11 +1399,28 @@ async function saveModelToDrive(modelId: string, filename: string): Promise<stri
   return result.webViewLink as string;
 }
 
-async function saveToDrive(filename: string) {
+async function saveToDrive(filename: string, projectName?: string) {
   if (!currentModelId) return;
   startLoading(`Exporting ${filename}…`);
   try {
     const link = await saveModelToDrive(currentModelId, filename);
+    if (projectName) {
+      const { parseModelFilename, saveProjectNameOverride } = await import("./model-picker");
+      const parsed = parseModelFilename(filename);
+      if (parsed) {
+        try {
+          await saveProjectNameOverride(parsed.jobNumber, projectName);
+        } catch (err) {
+          // The model itself saved fine — a failure here shouldn't look
+          // like the whole save failed, just flag it separately.
+          showError(
+            err instanceof Error
+              ? `Model saved, but couldn't save the project name: ${err.message}`
+              : "Model saved, but couldn't save the project name.",
+          );
+        }
+      }
+    }
     stopLoading();
     currentFileName = filename;
     updateFilenameDisplay();
