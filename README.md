@@ -99,7 +99,8 @@ unless you're testing a Pages-path build locally
   silently uploading something the catalog will never be able to find.
   A successful single-model save shows the file's Drive share link
   directly in the popover
-- Light/dark theme toggle, persisted across visits
+- Light/dark theme toggle, persisted across visits — defaults to light on
+  a first visit with nothing saved yet
 - Both side panels collapse via the small toggle buttons in the viewport
   gutters
 - **Mobile layout** (≤768px) — the side panels become full-screen overlays
@@ -233,12 +234,13 @@ only need one project), not real access control. If that ever needs to
 change, it'd mean adding actual authentication, which is a different
 and larger piece of work.
 
-**What external mode strips out**, on the viewer: Set pivot, Background,
-Save locally, Save to Drive. Kept: Fit view, Isolate, Show all, the
-properties panel, theme toggle, and — per request — the ability to
-*select* (not create) saved Locations, if any were included in the link.
-"Browse models" in the header becomes "Other zones," linking to the
-catalog in the same restricted mode instead of the full company catalog.
+**What external mode strips out**, on the viewer: Open IFC, Set pivot,
+Background, Save locally, Save to Drive. Kept: Fit view, Isolate, Show
+all, the properties panel, theme toggle, and — per request — the ability
+to *select* (not create) saved Locations, if any were included in the
+link. "Browse models" in the header becomes "Other zones," linking to
+the catalog in the same restricted mode instead of the full company
+catalog.
 
 **On the catalog page**, external mode filters everything to a single
 job number and hides "Show completed" (an internal project-tracking

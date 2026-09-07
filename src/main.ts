@@ -21,7 +21,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 // theme.
 const THEME_KEY = "setout-theme";
 function getStoredTheme(): Theme {
-  return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
+  return localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light";
 }
 let currentTheme = getStoredTheme();
 document.documentElement.setAttribute("data-theme", currentTheme);
@@ -103,7 +103,7 @@ app.innerHTML = `
           </div>
         </div>
         <div class="tool-sep"></div>
-        <label class="upload-btn desktop-only" for="file-input">${icon.upload}Open IFC</label>
+        <label class="upload-btn desktop-only external-hide" for="file-input">${icon.upload}Open IFC</label>
         <input type="file" id="add-model-input" accept=".ifc,.frag" style="display:none" />
         <button class="tool-btn desktop-only external-hide" id="btn-save-local" title="Download the converted .frag file to your computer — for testing, without needing Drive configured" disabled>${icon.localSave}Save locally</button>
         <div class="bg-picker-wrap desktop-only external-hide">

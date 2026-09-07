@@ -17,7 +17,7 @@ const CHEVRON_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 const THEME_KEY = "setout-theme";
 type Theme = "dark" | "light";
 function getStoredTheme(): Theme {
-  return localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
+  return localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light";
 }
 let currentTheme = getStoredTheme();
 document.documentElement.setAttribute("data-theme", currentTheme);
