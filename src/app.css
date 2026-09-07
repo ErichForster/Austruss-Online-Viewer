@@ -375,6 +375,33 @@
   height: 12px;
 }
 
+.location-row-home {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+}
+
+.location-row-home:hover {
+  color: var(--accent);
+  background: var(--bg-panel);
+}
+
+.location-row-home.is-home {
+  color: var(--accent);
+}
+
+.location-row-home svg {
+  width: 13px;
+  height: 13px;
+}
+
 .upload-btn {
   display: flex;
   align-items: center;
@@ -1392,4 +1419,84 @@
   .panel-right {
     border-left: none;
   }
+}
+
+/* ---------- Blocking save overlay ---------- */
+.save-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.save-overlay:not([hidden]) {
+  display: flex;
+}
+
+.save-overlay-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  padding: 36px 44px;
+  min-width: 220px;
+}
+
+.save-overlay-spinner {
+  display: block;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 4px solid var(--border);
+  border-top-color: var(--accent);
+  animation: spin 0.7s linear infinite;
+}
+
+.save-overlay-spinner[hidden] {
+  display: none;
+}
+
+.save-overlay-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #2ea043;
+  color: white;
+}
+
+.save-overlay-check[hidden] {
+  display: none;
+}
+
+.save-overlay-check svg {
+  width: 22px;
+  height: 22px;
+}
+
+.save-overlay-message {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-primary);
+  text-align: center;
+  max-width: 260px;
+}
+
+/* .tool-btn / .upload-btn both set display:flex unconditionally with no
+   [hidden] guard (see the long history of this exact bug elsewhere in
+   this file) — these two buttons are the first place hidden is toggled
+   directly on one of them, so scoping the fix here rather than touching
+   the shared base classes everything else relies on. */
+#save-overlay-cancel[hidden],
+#save-overlay-close[hidden] {
+  display: none;
 }

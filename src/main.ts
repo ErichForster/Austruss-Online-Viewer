@@ -44,6 +44,7 @@ const externalJob = startupParams.get("job");
 interface ExternalLocation {
   name: string;
   point: { x: number; y: number; z: number };
+  cameraPosition?: { x: number; y: number; z: number };
 }
 let externalLocations: ExternalLocation[] = [];
 if (isExternalMode) {
@@ -251,6 +252,15 @@ app.innerHTML = `
       </div>
     </div>
   </div>
+  <div class="save-overlay" id="save-overlay" hidden>
+    <div class="save-overlay-card">
+      <div class="save-overlay-spinner" id="save-overlay-spinner"></div>
+      <div class="save-overlay-check" id="save-overlay-check" hidden>${icon.check}</div>
+      <p class="save-overlay-message" id="save-overlay-message">Saving…</p>
+      <button class="tool-btn" id="save-overlay-cancel">Cancel</button>
+      <button class="upload-btn" id="save-overlay-close" hidden>Close</button>
+    </div>
+  </div>
 `;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -299,6 +309,48 @@ const shareLinkInput = $<HTMLInputElement>("share-link-input");
 const shareCopyLinkBtn = $<HTMLButtonElement>("share-copy-link");
 const shareQrImg = $<HTMLImageElement>("share-qr-img");
 const shareCopyQrBtn = $<HTMLButtonElement>("share-copy-qr");
+
+// --- Blocking save overlay: covers the whole page during a Drive save so
+// it's unmistakable the site isn't clickable, since people were hitting
+// Save multiple times in a row without one. ---
+const saveOverlay = $("save-overlay");
+const saveOverlaySpinner = $("save-overlay-spinner");
+const saveOverlayCheck = $("save-overlay-check");
+const saveOverlayMessage = $("save-overlay-message");
+const saveOverlayCancelBtn = $<HTMLButtonElement>("save-overlay-cancel");
+const saveOverlayCloseBtn = $<HTMLButtonElement>("save-overlay-close");
+let activeSaveController: AbortController | null = null;
+
+function showSaveOverlaySaving(message: string, controller: AbortController) {
+  activeSaveController = controller;
+  saveOverlayMessage.textContent = message;
+  saveOverlaySpinner.hidden = false;
+  saveOverlayCheck.hidden = true;
+  saveOverlayCancelBtn.hidden = false;
+  saveOverlayCloseBtn.hidden = true;
+  saveOverlay.hidden = false;
+}
+function showSaveOverlayDone(html: string) {
+  activeSaveController = null;
+  saveOverlayMessage.innerHTML = html;
+  saveOverlaySpinner.hidden = true;
+  saveOverlayCheck.hidden = false;
+  saveOverlayCancelBtn.hidden = true;
+  saveOverlayCloseBtn.hidden = false;
+}
+function hideSaveOverlay() {
+  activeSaveController = null;
+  saveOverlay.hidden = true;
+}
+saveOverlayCancelBtn.addEventListener("click", () => {
+  // Aborts the network request if it's already in flight. The export/
+  // encode work that happens before the request is sent isn't
+  // interruptible mid-step, but the upload itself never proceeds once
+  // aborted, which is what actually matters here.
+  activeSaveController?.abort();
+  hideSaveOverlay();
+});
+saveOverlayCloseBtn.addEventListener("click", hideSaveOverlay);
 const themeToggleBtn = $<HTMLButtonElement>("theme-toggle");
 const toggleTree = $("toggle-tree");
 const toggleProps = $("toggle-props");
@@ -628,8 +680,15 @@ async function handleFile(file: File, mode: "replace" | "add" = "replace") {
     }
     console.log("[handleFile] model loaded, starting fitView()");
     const tFit = performance.now();
-    await withTimeout(viewer.fitView(false), 15000, "fitView");
-    console.log(`[handleFile] fitView() done (${((performance.now() - tFit) / 1000).toFixed(1)}s)`);
+    // If a home view has been set for this model, open straight to that
+    // instead of the generic fit-to-model framing.
+    const homeLocation = getLocations(model.modelId).find((l) => l.isHome && l.cameraPosition);
+    if (homeLocation?.cameraPosition) {
+      await withTimeout(viewer.goToView(homeLocation.point, homeLocation.cameraPosition, false), 15000, "goToView");
+    } else {
+      await withTimeout(viewer.fitView(false), 15000, "fitView");
+    }
+    console.log(`[handleFile] view ready (${((performance.now() - tFit) / 1000).toFixed(1)}s)`);
 
     stopLoading();
     btnFit.disabled = false;
@@ -1073,10 +1132,15 @@ viewerContainer.addEventListener("click", () => {
   viewerContainer.style.cursor = "";
 });
 
-// --- Locations: named pivot points, saved per model in localStorage ---
+// --- Locations: named views (pivot + camera position), saved per model
+// in localStorage. Capturing the camera position alongside the pivot
+// (rather than just the pivot alone) means recalling one restores the
+// whole framing, not just where the camera happens to orbit around.
 interface SavedLocation {
   name: string;
   point: { x: number; y: number; z: number };
+  cameraPosition?: { x: number; y: number; z: number };
+  isHome?: boolean;
 }
 function locationsKey(modelId: string): string {
   return `setout-locations:${modelId}`;
@@ -1095,6 +1159,14 @@ function setLocations(modelId: string, locations: SavedLocation[]) {
   } catch {
     // Storage quota etc. — not worth interrupting the person over.
   }
+  viewer.setLocationMarkers(locations.map((l) => l.point));
+}
+// Older saved locations (from before cameraPosition existed) only have a
+// pivot point — recall falls back to the pivot-only jump for those rather
+// than restoring a fabricated camera position.
+function goToSavedLocation(loc: SavedLocation) {
+  if (loc.cameraPosition) viewer.goToView(loc.point, loc.cameraPosition);
+  else viewer.goToPivot(loc.point);
 }
 function renderLocationsList() {
   locationsList.innerHTML = "";
@@ -1102,6 +1174,7 @@ function renderLocationsList() {
   // nothing to edit here) instead of this device's local storage, which
   // an external viewer's browser wouldn't have anyway.
   if (isExternalMode) {
+    viewer.setLocationMarkers(externalLocations.map((l) => l.point));
     if (!externalLocations.length) {
       locationsList.innerHTML = `<div class="locations-empty">No locations were included with this link.</div>`;
       return;
@@ -1111,7 +1184,7 @@ function renderLocationsList() {
       row.className = "location-row";
       row.innerHTML = `<span class="location-row-name">${loc.name.replace(/</g, "&lt;")}</span>`;
       row.addEventListener("click", () => {
-        viewer.goToPivot(loc.point);
+        goToSavedLocation(loc);
         locationsPicker.hidden = true;
       });
       locationsList.appendChild(row);
@@ -1121,6 +1194,7 @@ function renderLocationsList() {
 
   if (!currentModelId) return;
   const locations = getLocations(currentModelId);
+  viewer.setLocationMarkers(locations.map((l) => l.point));
   if (!locations.length) {
     locationsList.innerHTML = `<div class="locations-empty">No saved locations for this model yet.</div>`;
     return;
@@ -1129,13 +1203,21 @@ function renderLocationsList() {
     const row = document.createElement("div");
     row.className = "location-row";
     row.innerHTML = `
+      <button class="location-row-home${loc.isHome ? " is-home" : ""}" title="${loc.isHome ? "This is the home view — opens automatically" : "Set as home view"}">${loc.isHome ? icon.homeFilled : icon.home}</button>
       <span class="location-row-name">${loc.name.replace(/</g, "&lt;")}</span>
       <button class="location-row-delete" title="Delete">${icon.trash}</button>
     `;
     row.addEventListener("click", (e) => {
-      if ((e.target as HTMLElement).closest(".location-row-delete")) return;
-      viewer.goToPivot(loc.point);
+      if ((e.target as HTMLElement).closest(".location-row-delete, .location-row-home")) return;
+      goToSavedLocation(loc);
       locationsPicker.hidden = true;
+    });
+    row.querySelector(".location-row-home")!.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!currentModelId) return;
+      const updated = getLocations(currentModelId).map((l) => ({ ...l, isHome: l === loc ? !loc.isHome : false }));
+      setLocations(currentModelId, updated);
+      renderLocationsList();
     });
     row.querySelector(".location-row-delete")!.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -1161,7 +1243,8 @@ locationSaveBtn.addEventListener("click", () => {
   const name = locationNameInput.value.trim();
   if (!name || !currentModelId) return;
   const point = viewer.getCurrentPivot();
-  setLocations(currentModelId, [...getLocations(currentModelId), { name, point }]);
+  const cameraPosition = viewer.getCurrentCameraPosition();
+  setLocations(currentModelId, [...getLocations(currentModelId), { name, point, cameraPosition }]);
   locationNameInput.value = "";
   renderLocationsList();
 });
@@ -1392,7 +1475,7 @@ function arrayBufferToBase64(bytes: Uint8Array): Promise<string> {
 // Core save: exports one model's compact Fragments buffer and uploads it.
 // Throws on failure — callers handle their own loading/error UI, since the
 // single-model and save-all-models flows want different messaging.
-async function saveModelToDrive(modelId: string, filename: string): Promise<string> {
+async function saveModelToDrive(modelId: string, filename: string, signal?: AbortSignal): Promise<string> {
   if (!filename.toLowerCase().endsWith(".frag")) {
     throw new Error("File name must end in .frag");
   }
@@ -1424,6 +1507,7 @@ async function saveModelToDrive(modelId: string, filename: string): Promise<stri
     // handle — see the comment in apps-script/Code.gs for the full story.
     headers: { "Content-Type": "text/plain;charset=utf-8" },
     body: JSON.stringify({ filename, contentBase64, folderId: config.rootFolderId }),
+    signal,
   });
   const result = await res.json();
   if (!result.success) throw new Error(result.error || "Unknown error");
@@ -1434,9 +1518,11 @@ async function saveModelToDrive(modelId: string, filename: string): Promise<stri
 
 async function saveToDrive(filename: string, projectName?: string) {
   if (!currentModelId) return;
-  startLoading(`Exporting ${filename}…`);
+  savePicker.hidden = true;
+  const controller = new AbortController();
+  showSaveOverlaySaving(`Saving ${filename} to Drive…`, controller);
   try {
-    const link = await saveModelToDrive(currentModelId, filename);
+    const link = await saveModelToDrive(currentModelId, filename, controller.signal);
     if (projectName) {
       const { parseModelFilename, saveProjectNameOverride } = await import("./model-picker");
       const parsed = parseModelFilename(filename);
@@ -1454,21 +1540,19 @@ async function saveToDrive(filename: string, projectName?: string) {
         }
       }
     }
-    stopLoading();
     currentFileName = filename;
     updateFilenameDisplay();
     updateShareButtonState();
-    showSaveResult(filename, link);
+    showSaveOverlayDone(
+      `Saved <strong>${filename.replace(/</g, "&lt;")}</strong>.<br><a href="${link}" target="_blank" rel="noopener">Open share link ↗</a>`,
+    );
   } catch (err) {
-    stopLoading();
+    if (err instanceof DOMException && err.name === "AbortError") {
+      return; // cancelled — overlay's already closed, no error to show
+    }
+    hideSaveOverlay();
     showError(err instanceof Error ? `Couldn't save to Drive: ${err.message}` : "Couldn't save to Drive.");
   }
-}
-
-function showSaveResult(filename: string, link: string) {
-  saveResultEl.hidden = false;
-  saveResultEl.innerHTML = `Saved <strong>${filename.replace(/</g, "&lt;")}</strong>. <a href="${link}" target="_blank" rel="noopener">Open share link ↗</a>`;
-  savePicker.hidden = false; // keep the popover open so the link is visible
 }
 
 // Multiple models loaded — save each one under its own existing name

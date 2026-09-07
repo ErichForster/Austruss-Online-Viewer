@@ -49,10 +49,26 @@ unless you're testing a Pages-path build locally
 - **Fit view, set pivot, viewport background** — toolbar controls for
   camera framing and viewport appearance, including uploading a custom
   background image (remembered across visits, up to 3MB)
-- **Locations** — save the current pivot point under a name and recall it
-  later; saved per model (by filename) in the browser's local storage, so
-  they're specific to this device and this model file, not shared via
-  Drive
+- **Locations** — save the current view (pivot point *and* camera
+  position, captured together automatically) under a name and recall it
+  later — restores the full framing, not just where the camera orbits
+  around. Saved per model (by filename) in the browser's local storage,
+  so they're specific to this device and this model file, not shared via
+  Drive. One location can be marked "home" (a small house icon on its
+  row) — that view opens automatically whenever the model loads, instead
+  of the usual fit-to-model framing. Older saved locations from before
+  this existed still work — they just recall the pivot alone, since no
+  camera position was ever captured for them
+- **Pivot and location markers** — a small green sphere in the 3D scene
+  always shows the current pivot point, live-updating as you orbit, pan,
+  or zoom (panning in particular carries the pivot along with it, not
+  just explicit Set Pivot clicks — the marker reflects that). Every saved
+  Location for the loaded model shows as a small blue sphere at the same
+  time, so you can see where they all are at a glance. Both are simple
+  always-on-top spheres sized for typical metre-scale IFC models — not
+  derived from the model's own scale, and not screen-space-constant
+  (they'll look larger up close, smaller from a distance, like anything
+  else in the scene)
 - **Spatial tree** (left panel) — click any node to select and zoom the
   corresponding element; category badges show the IFC entity type
 - **Properties panel** (right) — attributes plus property sets
@@ -106,8 +122,11 @@ unless you're testing a Pages-path build locally
   fixes it later. Pre-fills with the name already on record when one
   exists, left blank otherwise (never pre-filled with the "Job `<number>`"
   placeholder itself, since that isn't a real name to silently re-save).
-  A successful single-model save shows the file's Drive share link
-  directly in the popover
+  Saving to Drive shows a full-page blocking overlay with a spinner and a
+  Cancel button — added after people were clicking Save multiple times in
+  a row with no visible sign the page was busy — which switches to a
+  checkmark and the file's Drive share link once it finishes, with its
+  own Close button
 - Light/dark theme toggle, persisted across visits — defaults to light on
   a first visit with nothing saved yet
 - The Austruss logo/wordmark links back to a blank `index.html` (clears
@@ -300,20 +319,22 @@ index.html?external=1&fileId=<driveFileId>&name=<filename>&job=<jobNumber>
 ```
 
 To include selectable Locations, add a `locations` parameter — a
-URL-encoded JSON array:
+URL-encoded JSON array. `cameraPosition` is optional; without it, picking
+the location only jumps the pivot rather than the full view:
 
 ```
-&locations=%5B%7B%22name%22%3A%22Stair%20core%22%2C%22point%22%3A%7B%22x%22%3A1.2%2C%22y%22%3A0%2C%22z%22%3A3.4%7D%7D%5D
+&locations=%5B%7B%22name%22%3A%22Stair%20core%22%2C%22point%22%3A%7B%22x%22%3A1.2%2C%22y%22%3A0%2C%22z%22%3A3.4%7D%2C%22cameraPosition%22%3A%7B%22x%22%3A5%2C%22y%22%3A3%2C%22z%22%3A8%7D%7D%5D
 ```
 which decodes to:
 ```json
-[{ "name": "Stair core", "point": { "x": 1.2, "y": 0, "z": 3.4 } }]
+[{ "name": "Stair core", "point": { "x": 1.2, "y": 0, "z": 3.4 }, "cameraPosition": { "x": 5, "y": 3, "z": 8 } }]
 ```
 The easiest way to get real coordinates: open the model yourself, use
 Set Pivot + Locations to save one, then open your browser's dev tools →
 Application → Local Storage → find the `setout-locations:<filename>` key
-— that's the same `{name, point}` shape, ready to copy into the array
-above, append to the Share button's link, and URL-encode.
+— that's the same shape (plus an `isHome` flag, irrelevant here), ready
+to copy into the array above, append to the Share button's link, and
+URL-encode.
 
 The equivalent catalog link for "other zones in this project":
 ```

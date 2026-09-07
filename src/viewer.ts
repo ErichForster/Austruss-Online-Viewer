@@ -36,6 +36,10 @@ export class IfcViewer {
   private currentTheme: Theme = "dark";
   private explicitBackground: string | null = null;
   private backgroundTexture: THREE.Texture | null = null;
+  private markerGeometry!: THREE.SphereGeometry;
+  private pivotMarker!: THREE.Mesh;
+  private locationMarkerMaterial!: THREE.MeshBasicMaterial;
+  private locationMarkerGroup!: THREE.Group;
 
   onSelect: ((info: SelectionInfo | null) => void) | null = null;
 
@@ -127,7 +131,57 @@ export class IfcViewer {
     });
     this.highlighter.events.select.onClear.add(() => this.onSelect?.(null));
 
+    // --- Pivot + Location markers ---
+    // Small always-on-top spheres (depthTest off) so they stay visible
+    // through the model rather than getting buried inside it. 0.15 world
+    // units (assumed metres, matching typical IFC export units) — a
+    // reasonable size for building-scale models, not something derived
+    // from the actual model's own scale.
+    this.markerGeometry = new THREE.SphereGeometry(0.15, 16, 16);
+    this.pivotMarker = new THREE.Mesh(
+      this.markerGeometry,
+      new THREE.MeshBasicMaterial({ color: 0x2ecc71, depthTest: false, transparent: true, opacity: 0.95 }),
+    );
+    this.pivotMarker.renderOrder = 999;
+    this.pivotMarker.visible = false;
+    this.world.scene.three.add(this.pivotMarker);
+
+    this.locationMarkerMaterial = new THREE.MeshBasicMaterial({
+      color: 0x3b82f6, depthTest: false, transparent: true, opacity: 0.95,
+    });
+    this.locationMarkerGroup = new THREE.Group();
+    this.world.scene.three.add(this.locationMarkerGroup);
+
+    this.world.camera.controls.addEventListener("update", () => this.updatePivotMarker());
+
     window.addEventListener("resize", () => this.world.renderer?.resize());
+  }
+
+  // Tracks the camera's current orbit target live — called on every
+  // camera-controls "update" event, which fires during orbit, pan, zoom,
+  // and animated transitions alike, so the marker follows pivot changes
+  // caused by any of them (panning in particular carries the pivot along
+  // with it, not just explicit Set Pivot clicks).
+  private updatePivotMarker() {
+    if (this.fragments.list.size === 0) {
+      this.pivotMarker.visible = false;
+      return;
+    }
+    const target = this.world.camera.controls.getTarget(new THREE.Vector3());
+    this.pivotMarker.position.copy(target);
+    this.pivotMarker.visible = true;
+  }
+
+  // Replaces the full set of blue location markers — called whenever the
+  // saved-locations list for the active model changes, not continuously.
+  setLocationMarkers(points: { x: number; y: number; z: number }[]) {
+    this.locationMarkerGroup.clear();
+    for (const p of points) {
+      const marker = new THREE.Mesh(this.markerGeometry, this.locationMarkerMaterial);
+      marker.position.set(p.x, p.y, p.z);
+      marker.renderOrder = 998;
+      this.locationMarkerGroup.add(marker);
+    }
   }
 
   async loadIfc(
@@ -212,6 +266,8 @@ export class IfcViewer {
       await this.fragments.core.disposeModel(id);
     }
     this.baseModelId = null;
+    this.pivotMarker.visible = false;
+    this.locationMarkerGroup.clear();
     await this.fragments.core.update(true);
   }
 
@@ -296,8 +352,32 @@ export class IfcViewer {
     return { x: target.x, y: target.y, z: target.z };
   }
 
+  getCurrentCameraPosition(): { x: number; y: number; z: number } {
+    const pos = this.world.camera.controls.getPosition(new THREE.Vector3(), true);
+    return { x: pos.x, y: pos.y, z: pos.z };
+  }
+
   goToPivot(point: { x: number; y: number; z: number }, animate = true) {
     this.world.camera.controls.setTarget(point.x, point.y, point.z, animate);
+  }
+
+  // Restores a full saved view — both the camera's own position and what
+  // it's looking at — rather than just re-centering the orbit target the
+  // way goToPivot does. Also forces a geometry-stream update the same way
+  // fitView does, since Fragments streams visible geometry in based on
+  // the camera's current view; skipping that after a non-animated jump
+  // would leave the model looking empty until something else triggers it.
+  async goToView(
+    point: { x: number; y: number; z: number },
+    cameraPosition: { x: number; y: number; z: number },
+    animate = true,
+  ) {
+    await this.world.camera.controls.setLookAt(
+      cameraPosition.x, cameraPosition.y, cameraPosition.z,
+      point.x, point.y, point.z,
+      animate,
+    );
+    await this.fragments.core.update(true);
   }
 
   // Projects a world-space point to CSS pixel coordinates relative to the
