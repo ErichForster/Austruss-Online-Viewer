@@ -58,6 +58,22 @@ if (isExternalMode) {
   }
 }
 
+interface HomeView {
+  point: { x: number; y: number; z: number };
+  cameraPosition: { x: number; y: number; z: number };
+}
+let externalHome: HomeView | null = null;
+if (isExternalMode) {
+  const raw = startupParams.get("home");
+  if (raw) {
+    try {
+      externalHome = JSON.parse(raw);
+    } catch {
+      // Malformed — ignore rather than break the page over it.
+    }
+  }
+}
+
 const app = document.getElementById("app")!;
 
 app.innerHTML = `
@@ -72,6 +88,8 @@ app.innerHTML = `
       <span class="filename" id="filename"></span>
       <div class="toolbar">
         <button class="tool-btn" id="btn-fit" title="Fit view" disabled>${icon.fit}Fit</button>
+        <button class="tool-btn" id="btn-home" title="Go to the home view" disabled>${icon.home}Home</button>
+        <button class="tool-btn desktop-only external-hide" id="btn-set-home" title="Save the current view as the home view for this model" disabled>${icon.homeFilled}Set home</button>
         <div class="tool-sep"></div>
         <button class="tool-btn" id="btn-isolate" title="Isolate selection" disabled>${icon.isolate}Isolate</button>
         <button class="tool-btn" id="btn-hide" title="Hide the selected element only, leaving everything else visible" disabled>${icon.hide}Hide</button>
@@ -276,6 +294,8 @@ const selectionPin = $("selection-pin");
 const selectionPinName = $("selection-pin-name");
 const selectionPinFrame = $("selection-pin-frame");
 const btnFit = $<HTMLButtonElement>("btn-fit");
+const btnHome = $<HTMLButtonElement>("btn-home");
+const btnSetHome = $<HTMLButtonElement>("btn-set-home");
 const btnIsolate = $<HTMLButtonElement>("btn-isolate");
 const btnHide = $<HTMLButtonElement>("btn-hide");
 const btnShowAll = $<HTMLButtonElement>("btn-show-all");
@@ -441,6 +461,8 @@ const tree = new SpatialTree(
       btnBackground.disabled = true;
       btnSave.disabled = true;
       btnSaveLocal.disabled = true;
+      btnSetHome.disabled = true;
+      btnHome.disabled = true;
       dropzone.style.display = "flex";
       renderProperties(propsRoot, null);
       hidePin();
@@ -726,11 +748,12 @@ async function handleFile(file: File, mode: "replace" | "add" = "replace") {
     }
     console.log("[handleFile] model loaded, starting fitView()");
     const tFit = performance.now();
-    // If a home view has been set for this model, open straight to that
-    // instead of the generic fit-to-model framing.
-    const homeLocation = getLocations(model.modelId).find((l) => l.isHome && l.cameraPosition);
-    if (homeLocation?.cameraPosition) {
-      await withTimeout(viewer.goToView(homeLocation.point, homeLocation.cameraPosition, false), 15000, "goToView");
+    // If a home view has been set for this model (or passed via the
+    // external link), open straight to that instead of the generic
+    // fit-to-model framing.
+    const home = isExternalMode ? externalHome : getHomeView(model.modelId);
+    if (home) {
+      await withTimeout(viewer.goToView(home.point, home.cameraPosition, false), 15000, "goToView");
     } else {
       await withTimeout(viewer.fitView(false), 15000, "fitView");
     }
@@ -743,12 +766,14 @@ async function handleFile(file: File, mode: "replace" | "add" = "replace") {
     btnLocations.disabled = false;
     btnAddModelTree.disabled = false;
     btnBackground.disabled = false;
+    btnSetHome.disabled = false;
 
     loadedModels.set(model.modelId, file.name);
     updateFilenameDisplay();
     currentModelId = model.modelId;
     currentFileName = file.name;
     updateShareButtonState();
+    updateHomeButtonState();
     // Show this model's own saved locations right away rather than
     // whatever was left over from a previously loaded model, or nothing
     // at all until the Locations popover happens to get opened.
@@ -1185,6 +1210,55 @@ viewerContainer.addEventListener("click", () => {
   viewerContainer.style.cursor = "";
 });
 
+// --- Home view: a single dedicated view per model (distinct from the
+// named Locations list below) — "Set Home" captures the current view in
+// one click, no naming required; "Home" recalls it. Available in
+// external mode too (recall only — Set Home stays internal, since
+// external mode can't persist anything), sourced from a ?home= URL
+// param there instead of localStorage.
+function homeKey(modelId: string): string {
+  return `setout-home:${modelId}`;
+}
+function getHomeView(modelId: string): HomeView | null {
+  try {
+    const raw = localStorage.getItem(homeKey(modelId));
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+function setHomeView(modelId: string, home: HomeView) {
+  try {
+    localStorage.setItem(homeKey(modelId), JSON.stringify(home));
+  } catch {
+    // Storage quota etc. — not worth interrupting the person over.
+  }
+}
+function updateHomeButtonState() {
+  if (isExternalMode) {
+    btnHome.disabled = !externalHome;
+    return;
+  }
+  btnHome.disabled = !currentModelId || !getHomeView(currentModelId);
+}
+btnSetHome.addEventListener("click", () => {
+  if (!currentModelId) return;
+  setHomeView(currentModelId, {
+    point: viewer.getCurrentPivot(),
+    cameraPosition: viewer.getCurrentCameraPosition(),
+  });
+  updateHomeButtonState();
+});
+btnHome.addEventListener("click", () => {
+  if (isExternalMode) {
+    if (externalHome) viewer.goToView(externalHome.point, externalHome.cameraPosition);
+    return;
+  }
+  if (!currentModelId) return;
+  const home = getHomeView(currentModelId);
+  if (home) viewer.goToView(home.point, home.cameraPosition);
+});
+
 // --- Locations: named views (pivot + camera position), saved per model
 // in localStorage. Capturing the camera position alongside the pivot
 // (rather than just the pivot alone) means recalling one restores the
@@ -1193,7 +1267,6 @@ interface SavedLocation {
   name: string;
   point: { x: number; y: number; z: number };
   cameraPosition?: { x: number; y: number; z: number };
-  isHome?: boolean;
 }
 function locationsKey(modelId: string): string {
   return `setout-locations:${modelId}`;
@@ -1259,21 +1332,13 @@ function renderLocationsList() {
     const row = document.createElement("div");
     row.className = "location-row";
     row.innerHTML = `
-      <button class="location-row-home${loc.isHome ? " is-home" : ""}" title="${loc.isHome ? "This is the home view — opens automatically" : "Set as home view"}">${loc.isHome ? icon.homeFilled : icon.home}</button>
       <span class="location-row-name">${loc.name.replace(/</g, "&lt;")}</span>
       <button class="location-row-delete" title="Delete">${icon.trash}</button>
     `;
     row.addEventListener("click", (e) => {
-      if ((e.target as HTMLElement).closest(".location-row-delete, .location-row-home")) return;
+      if ((e.target as HTMLElement).closest(".location-row-delete")) return;
       goToSavedLocation(loc);
       locationsPicker.hidden = true;
-    });
-    row.querySelector(".location-row-home")!.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (!currentModelId) return;
-      const updated = getLocations(currentModelId).map((l) => ({ ...l, isHome: l === loc ? !loc.isHome : false }));
-      setLocations(currentModelId, updated);
-      renderLocationsList();
     });
     row.querySelector(".location-row-delete")!.addEventListener("click", (e) => {
       e.stopPropagation();

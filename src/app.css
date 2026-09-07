@@ -375,36 +375,6 @@
   height: 12px;
 }
 
-.location-row-home {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  flex-shrink: 0;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  border-radius: var(--radius-sm);
-}
-
-.location-row-home:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: var(--bg-panel-raised);
-}
-
-.location-row-home.is-home {
-  color: var(--accent-ink);
-  background: var(--accent);
-  border-color: var(--accent);
-}
-
-.location-row-home svg {
-  width: 14px;
-  height: 14px;
-}
-
 .upload-btn {
   display: flex;
   align-items: center;

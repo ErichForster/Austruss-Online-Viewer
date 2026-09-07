@@ -54,11 +54,15 @@ unless you're testing a Pages-path build locally
   later — restores the full framing, not just where the camera orbits
   around. Saved per model (by filename) in the browser's local storage,
   so they're specific to this device and this model file, not shared via
-  Drive. One location can be marked "home" (a small house icon on its
-  row) — that view opens automatically whenever the model loads, instead
-  of the usual fit-to-model framing. Older saved locations from before
-  this existed still work — they just recall the pivot alone, since no
-  camera position was ever captured for them
+  Drive. Older saved locations from before camera position was captured
+  still work — they just recall the pivot alone
+- **Home view** — separate from named Locations: **Set Home** captures
+  the current view as a single dedicated view for that model, no naming
+  needed; **Home** recalls it, and it's also what a model opens to
+  automatically instead of the usual fit-to-model framing. **Home** (not
+  Set Home) is available in external/share mode too, sourced from a
+  `?home=` link parameter instead of local storage, same shape as
+  `?locations=` below
 - **Pivot and location markers** — a small green sphere in the 3D scene
   shows the current pivot point, updated only when it's deliberately set
   (Set Pivot, recalling a Location, or selecting an element — selecting
@@ -336,9 +340,23 @@ which decodes to:
 The easiest way to get real coordinates: open the model yourself, use
 Set Pivot + Locations to save one, then open your browser's dev tools →
 Application → Local Storage → find the `setout-locations:<filename>` key
-— that's the same shape (plus an `isHome` flag, irrelevant here), ready
-to copy into the array above, append to the Share button's link, and
-URL-encode.
+— that's the same shape, ready to copy into the array above, append to
+the Share button's link, and URL-encode.
+
+To include a Home view (the "Home" button works in external mode, "Set
+Home" doesn't — nothing to persist to there), add a `home` parameter —
+the same `{point, cameraPosition}` shape as one Location entry, not
+wrapped in an array:
+
+```
+&home=%7B%22point%22%3A%7B%22x%22%3A1.2%2C%22y%22%3A0%2C%22z%22%3A3.4%7D%2C%22cameraPosition%22%3A%7B%22x%22%3A5%2C%22y%22%3A3%2C%22z%22%3A8%7D%7D
+```
+which decodes to:
+```json
+{ "point": { "x": 1.2, "y": 0, "z": 3.4 }, "cameraPosition": { "x": 5, "y": 3, "z": 8 } }
+```
+Find real coordinates the same way — dev tools → Local Storage → the
+`setout-home:<filename>` key for a model you've clicked "Set Home" on.
 
 The equivalent catalog link for "other zones in this project":
 ```
