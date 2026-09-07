@@ -822,8 +822,10 @@ async function loadSession(session: SavedSession) {
     startLoading(`Loading ${m.name}… (${i + 1}/${session.models.length})`);
     try {
       const { bytes } = await downloadDriveModel(config.scriptUrl, m.fileId);
-      await handleFile(new File([new Uint8Array(bytes)], m.name), "add");
+      // Recorded before handleFile() — see the matching comment in
+      // loadFromQueryParams for why the order matters here.
       modelDriveFileIds.set(m.name, m.fileId);
+      await handleFile(new File([new Uint8Array(bytes)], m.name), "add");
     } catch (err) {
       failures++;
       console.error(err);
@@ -911,8 +913,10 @@ async function addModelFromDrive(fileId: string, name: string) {
   try {
     const { downloadDriveModel } = await import("./model-picker");
     const { bytes } = await downloadDriveModel(driveBrowseScriptUrl, fileId);
-    await handleFile(new File([new Uint8Array(bytes)], name), "add");
+    // Recorded before handleFile() — see the matching comment in
+    // loadFromQueryParams for why the order matters here.
     modelDriveFileIds.set(name, fileId);
+    await handleFile(new File([new Uint8Array(bytes)], name), "add");
   } catch (err) {
     stopLoading();
     showError(err instanceof Error ? `Couldn't load model from Drive: ${err.message}` : "Couldn't load model from Drive.");
@@ -1480,8 +1484,12 @@ async function loadFromQueryParams() {
       if (!data.success) throw new Error(data.error || "Unknown error downloading file");
       const bytes = base64ToBytes(data.contentBase64);
       const loadedName = data.name || fallbackName;
-      await handleFile(new File([new Uint8Array(bytes)], loadedName), mode);
+      // Recorded before handleFile() runs — handleFile() checks this map
+      // internally (to enable the Share button) as part of its own
+      // success path, so setting it after would be one step too late for
+      // that check to see it.
       modelDriveFileIds.set(loadedName, fileId);
+      await handleFile(new File([new Uint8Array(bytes)], loadedName), mode);
     } catch (err) {
       console.error(err);
       stopLoading();
