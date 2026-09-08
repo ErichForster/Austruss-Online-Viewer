@@ -4,6 +4,16 @@
   height: 100%;
 }
 
+/* External mode adds a third grid child (the standalone search bar,
+   see external-search-bar-wrap) between the header and body rows above
+   — without an explicit row for it, it became a visible grid item with
+   no defined row, pushing .body into an undefined implicit row instead
+   of the "1fr" track it needs, which collapsed the whole viewport to
+   nothing. This gives it its own auto-sized row instead. */
+.external-mode .shell {
+  grid-template-rows: 44px auto 1fr;
+}
+
 /* ---------- Header ---------- */
 .topbar {
   display: flex;
@@ -1330,6 +1340,10 @@
 
   .shell {
     grid-template-rows: auto 1fr;
+  }
+
+  .external-mode .shell {
+    grid-template-rows: auto auto 1fr;
   }
 
   .topbar {
