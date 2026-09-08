@@ -176,12 +176,20 @@ unless you're testing a Pages-path build locally
   gutters
 - **Mobile layout** (≤768px width, or ≤500px height to also catch
   landscape phones — see below) — the side panels become full-screen
-  overlays (hidden by default, opened via the same gutter toggles, each
-  with its own close button since the toggle that opened it gets covered
-  once the overlay is up), the toolbar condenses to Fit / Home / Isolate
-  / Hide / Show all / theme toggle (desktop-only tools like Set Pivot,
-  Locations, Background, and Save are hidden — mobile use is expected to
-  be arriving via a shared link, not local upload/editing), and the
+  overlays (hidden by default). Two ways to open/close them: the small
+  gutter toggle buttons at the viewport edges (same ones used to collapse
+  the panels on desktop), or dedicated Tree / Properties buttons in the
+  toolbar itself, added specifically because the gutter buttons sit at
+  z-index 5 and the panel overlay sits above them at z-index 40 — so once
+  a panel is open, its own gutter button is covered and can't be tapped
+  again. Each panel also has its own in-header close button for the same
+  reason. The toolbar buttons are the most robust of the three, since the
+  toolbar's row isn't covered by the panel overlay at all and stays
+  reachable the whole time; all three stay in sync with each other. The
+  rest of the toolbar condenses to Fit / Home / Isolate / Hide / Show all
+  / theme toggle (desktop-only tools like Set Pivot, Locations,
+  Background, and Save are hidden — mobile use is expected to be
+  arriving via a shared link, not local upload/editing), and the
   header logo and nav link shrink to icon-only. If the condensed toolbar
   still doesn't fit some particular screen, it scrolls horizontally
   rather than clipping — found and fixed a real bug here where it had no

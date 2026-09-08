@@ -95,6 +95,9 @@ app.innerHTML = `
         <button class="tool-btn" id="btn-isolate" title="Isolate selection" disabled>${icon.isolate}Isolate</button>
         <button class="tool-btn" id="btn-hide" title="Hide the selected element only, leaving everything else visible" disabled>${icon.hide}Hide</button>
         <button class="tool-btn" id="btn-show-all" title="Show all" disabled>${icon.showAll}Show all</button>
+        <div class="tool-sep mobile-only"></div>
+        <button class="tool-btn mobile-only" id="btn-toggle-tree-mobile" title="Toggle model tree">${icon.panelLeft}Tree</button>
+        <button class="tool-btn mobile-only" id="btn-toggle-props-mobile" title="Toggle properties">${icon.panelRight}Properties</button>
         <div class="tool-sep desktop-only"></div>
         <button class="tool-btn desktop-only external-hide" id="btn-pivot" title="Click a point on the model to set it as the orbit center" disabled>${icon.pivot}Set pivot</button>
         <div class="bg-picker-wrap desktop-only">
@@ -403,11 +406,36 @@ applyPanelState();
 toggleTree.addEventListener("click", () => {
   treeCollapsed = !treeCollapsed;
   applyPanelState();
+  updateMobileToggleButtons();
 });
 toggleProps.addEventListener("click", () => {
   propsCollapsed = !propsCollapsed;
   applyPanelState();
+  updateMobileToggleButtons();
 });
+
+// Same toggle, reachable from the toolbar instead of the small
+// viewport-edge gutter buttons — added because the gutter buttons get
+// covered by the panel overlay itself once open (z-index), and the
+// toolbar's own row isn't covered by that overlay, so this stays visible
+// and tappable the whole time as a second, more robust way in and out.
+const btnToggleTreeMobile = $<HTMLButtonElement>("btn-toggle-tree-mobile");
+const btnTogglePropsMobile = $<HTMLButtonElement>("btn-toggle-props-mobile");
+function updateMobileToggleButtons() {
+  btnToggleTreeMobile.classList.toggle("active", !treeCollapsed);
+  btnTogglePropsMobile.classList.toggle("active", !propsCollapsed);
+}
+btnToggleTreeMobile.addEventListener("click", () => {
+  treeCollapsed = !treeCollapsed;
+  applyPanelState();
+  updateMobileToggleButtons();
+});
+btnTogglePropsMobile.addEventListener("click", () => {
+  propsCollapsed = !propsCollapsed;
+  applyPanelState();
+  updateMobileToggleButtons();
+});
+updateMobileToggleButtons();
 
 // Mobile-only close buttons inside each panel's header — needed because
 // once a panel is a full-screen overlay, its own toggle button (which sits
@@ -416,10 +444,12 @@ toggleProps.addEventListener("click", () => {
 $<HTMLButtonElement>("close-tree").addEventListener("click", () => {
   treeCollapsed = true;
   applyPanelState();
+  updateMobileToggleButtons();
 });
 $<HTMLButtonElement>("close-props").addEventListener("click", () => {
   propsCollapsed = true;
   applyPanelState();
+  updateMobileToggleButtons();
 });
 
 const viewerContainer = $<HTMLDivElement>("viewer-canvas");
