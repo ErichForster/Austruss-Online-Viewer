@@ -225,3 +225,16 @@ button {
 .external-mode .external-hide {
   display: none !important;
 }
+
+/* Inverse of the above — shown only in external mode, e.g. the
+   standalone search bar that replaces the full Tree/Properties panels
+   there (see the comment in main.ts on why). Base rule hides by default;
+   the class-combination override below only fires once .external-mode
+   is present on <html>, so this stays hidden the rest of the time. */
+.external-only {
+  display: none;
+}
+
+.external-mode .external-only {
+  display: block;
+}

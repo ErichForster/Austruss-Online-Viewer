@@ -175,17 +175,21 @@ unless you're testing a Pages-path build locally
 - Both side panels collapse via the small toggle buttons in the viewport
   gutters
 - **Mobile layout** (≤768px width, or ≤500px height to also catch
-  landscape phones — see below) — the side panels become full-screen
-  overlays (hidden by default). Two ways to open/close them: the small
-  gutter toggle buttons at the viewport edges (same ones used to collapse
-  the panels on desktop), or dedicated Tree / Properties buttons in the
-  toolbar itself, added specifically because the gutter buttons sit at
-  z-index 5 and the panel overlay sits above them at z-index 40 — so once
-  a panel is open, its own gutter button is covered and can't be tapped
-  again. Each panel also has its own in-header close button for the same
-  reason. The toolbar buttons are the most robust of the three, since the
-  toolbar's row isn't covered by the panel overlay at all and stays
-  reachable the whole time; all three stay in sync with each other. The
+  landscape phones — see below) — in the normal (non-external) viewer,
+  the side panels become full-screen overlays (hidden by default). Two
+  ways to open/close them: the small gutter toggle buttons at the
+  viewport edges (same ones used to collapse the panels on desktop), or
+  dedicated Tree / Properties buttons in the toolbar itself, added
+  specifically because the gutter buttons sit at z-index 5 and the panel
+  overlay sits above them at z-index 40 — so once a panel is open, its
+  own gutter button is covered and can't be tapped again. Each panel
+  also has its own in-header close button for the same reason. The
+  toolbar buttons are the most robust of the three, since the toolbar's
+  row isn't covered by the panel overlay at all and stays reachable the
+  whole time; all three stay in sync with each other. None of this
+  applies in external/share mode, where both panels and all three ways
+  of opening them are hidden entirely in favour of the standalone search
+  bar — see "Sharing with people outside Austruss" below for why. The
   rest of the toolbar condenses to Fit / Home / Isolate / Hide / Show all
   / theme toggle (desktop-only tools like Set Pivot, Locations,
   Background, and Save are hidden — mobile use is expected to be
@@ -353,12 +357,25 @@ change, it'd mean adding actual authentication, which is a different
 and larger piece of work.
 
 **What external mode strips out**, on the viewer: Open IFC, Set pivot,
-Background, Save locally, Save to Drive. Kept: Fit view, Isolate, Show
-all, the properties panel, theme toggle, and — per request — the ability
-to *select* (not create) saved Locations, if any were included in the
-link. "Browse models" in the header becomes "Other zones," linking to
-the catalog in the same restricted mode instead of the full company
-catalog.
+Set Home, Background, Save locally, Save to Drive, and — as of the
+install-team search request — the full Model Tree and Properties panels
+too, on every screen size, not just mobile. Those were replaced with a
+standalone search bar (below the toolbar) that finds an item by name or
+assembly FrameName and jumps straight to it — reusing the same search
+index the in-panel tree search builds, just shown as a compact flat
+dropdown instead of a filtered hierarchy. This was a deliberate
+simplification for what the install team actually needs on site (find a
+specific frame, look at it) rather than a scope creep — browsing the
+full spatial hierarchy or reading IFC property sets was never the
+point of a locked link, and the full-height Tree/Properties panels were
+also the source of a stubborn mobile sizing bug that never got fully
+diagnosed; removing them for external mode sidesteps that entirely
+rather than continuing to chase it blind. Kept: Fit view, Isolate, Hide,
+Show all, Home (recall only), theme toggle, and — per request — the
+ability to *select* (not create) saved Locations, if any were included
+in the link. "Browse models" in the header becomes "Other zones,"
+linking to the catalog in the same restricted mode instead of the full
+company catalog.
 
 **On the catalog page**, external mode filters everything to a single
 job number and hides "Show completed" (an internal project-tracking

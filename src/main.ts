@@ -109,8 +109,8 @@ app.innerHTML = `
         <button class="tool-btn" id="btn-hide" title="Hide the selected element only, leaving everything else visible" disabled>${icon.hide}Hide</button>
         <button class="tool-btn" id="btn-show-all" title="Show all" disabled>${icon.showAll}Show all</button>
         <div class="tool-sep mobile-only"></div>
-        <button class="tool-btn mobile-only" id="btn-toggle-tree-mobile" title="Toggle model tree">${icon.panelLeft}Tree</button>
-        <button class="tool-btn mobile-only" id="btn-toggle-props-mobile" title="Toggle properties">${icon.panelRight}Properties</button>
+        <button class="tool-btn mobile-only external-hide" id="btn-toggle-tree-mobile" title="Toggle model tree">${icon.panelLeft}Tree</button>
+        <button class="tool-btn mobile-only external-hide" id="btn-toggle-props-mobile" title="Toggle properties">${icon.panelRight}Properties</button>
         <div class="tool-sep desktop-only"></div>
         <button class="tool-btn desktop-only external-hide" id="btn-pivot" title="Click a point on the model to set it as the orbit center" disabled>${icon.pivot}Set pivot</button>
         <div class="bg-picker-wrap desktop-only">
@@ -188,8 +188,15 @@ app.innerHTML = `
         <button class="theme-toggle" id="theme-toggle" title="Toggle light/dark theme"></button>
       </div>
     </header>
+    <div class="external-search-bar-wrap external-only" id="external-search-bar-wrap">
+      <div class="external-search-bar">
+        <input type="text" id="external-search-input" class="tree-search-input" placeholder="Search by name…" />
+        <button class="tree-search-clear" id="external-search-clear" title="Clear search" hidden>${icon.close}</button>
+      </div>
+      <div class="external-search-results" id="external-search-results" hidden></div>
+    </div>
     <div class="body" id="body">
-      <aside class="panel panel-left" id="panel-tree">
+      <aside class="panel panel-left external-hide" id="panel-tree">
         <div class="panel-head">
           <span class="panel-title">Model tree</span>
           <div class="tree-head-actions" hidden title="Multi-model loading is temporarily disabled — see the notes on the open bug">
@@ -223,8 +230,8 @@ app.innerHTML = `
         <div class="panel-body" id="tree-root"></div>
       </aside>
       <div class="viewport-wrap" id="viewport-wrap">
-        <button class="gutter-toggle left" id="toggle-tree" title="Toggle model tree">${icon.panelLeft}</button>
-        <button class="gutter-toggle right" id="toggle-props" title="Toggle properties">${icon.panelRight}</button>
+        <button class="gutter-toggle left external-hide" id="toggle-tree" title="Toggle model tree">${icon.panelLeft}</button>
+        <button class="gutter-toggle right external-hide" id="toggle-props" title="Toggle properties">${icon.panelRight}</button>
         <div id="viewer-canvas"></div>
         <div class="selection-pin" id="selection-pin" hidden>
           <div class="selection-pin-dot"></div>
@@ -251,7 +258,7 @@ app.innerHTML = `
           <input type="file" id="file-input" accept=".ifc,.frag" />
         </div>
       </div>
-      <aside class="panel panel-right" id="panel-props">
+      <aside class="panel panel-right external-hide" id="panel-props">
         <div class="panel-head">
           <span class="panel-title">Properties</span>
           <button class="panel-close mobile-only" id="close-props" title="Close">${icon.close}</button>
@@ -410,8 +417,12 @@ const toggleProps = $("toggle-props");
 // columns (see the ≤768px rules in app.css), so they should start hidden
 // rather than open over the viewport the moment the page loads.
 const isMobileLayout = window.matchMedia("(max-width: 768px), (max-height: 500px)").matches;
-let treeCollapsed = isMobileLayout;
-let propsCollapsed = isMobileLayout;
+// External mode has no way to open these panels at all anymore (see the
+// standalone search bar below), so they need to stay collapsed on every
+// screen size, not just mobile — otherwise the grid would still reserve
+// their 260px/300px columns as empty space on desktop.
+let treeCollapsed = isMobileLayout || isExternalMode;
+let propsCollapsed = isMobileLayout || isExternalMode;
 function applyPanelState() {
   bodyEl.classList.toggle("tree-collapsed", treeCollapsed);
   bodyEl.classList.toggle("props-collapsed", propsCollapsed);
@@ -541,6 +552,68 @@ treeSearchClear.addEventListener("click", () => {
   treeSearchClear.hidden = true;
   treeSearchInput.focus();
 });
+
+// External mode's standalone search — replaces the full Tree/Properties
+// panels there (removed entirely; see the external-hide additions
+// above) with just enough to find a specific frame and jump to it, which
+// is what the install team actually needs on site rather than browsing
+// the full spatial hierarchy or reading IFC properties. Reuses the same
+// underlying search index as the in-panel version (tree.search), just
+// rendered as a compact flat dropdown instead of filtering a full tree
+// in place — sidesteps the mobile panel-height issues entirely, since
+// there's no full-height overlay involved at all.
+if (isExternalMode) {
+  const externalSearchInput = $<HTMLInputElement>("external-search-input");
+  const externalSearchClear = $<HTMLButtonElement>("external-search-clear");
+  const externalSearchResults = $("external-search-results");
+
+  function renderExternalSearchResults() {
+    const query = externalSearchInput.value;
+    externalSearchClear.hidden = !query;
+    if (!query.trim()) {
+      externalSearchResults.hidden = true;
+      externalSearchResults.innerHTML = "";
+      return;
+    }
+    const matches = tree.search(query);
+    if (!matches.length) {
+      externalSearchResults.hidden = false;
+      externalSearchResults.innerHTML = `<div class="external-search-empty">No matches</div>`;
+      return;
+    }
+    externalSearchResults.innerHTML = "";
+    for (const match of matches) {
+      const row = document.createElement("button");
+      row.className = "external-search-result";
+      row.textContent = match.label;
+      row.addEventListener("click", async () => {
+        await viewer.selectByLocalId(match.modelId, match.localId);
+        externalSearchResults.hidden = true;
+      });
+      externalSearchResults.appendChild(row);
+    }
+    externalSearchResults.hidden = false;
+  }
+
+  externalSearchInput.addEventListener("input", renderExternalSearchResults);
+  externalSearchInput.addEventListener("focus", () => {
+    if (externalSearchInput.value.trim()) externalSearchResults.hidden = false;
+  });
+  externalSearchClear.addEventListener("click", () => {
+    externalSearchInput.value = "";
+    externalSearchClear.hidden = true;
+    externalSearchResults.hidden = true;
+    externalSearchResults.innerHTML = "";
+    externalSearchInput.focus();
+  });
+  // Tapping elsewhere dismisses the dropdown without clearing the typed
+  // query, so reopening (by refocusing) shows the same results again.
+  document.addEventListener("click", (e) => {
+    if (!(e.target as HTMLElement).closest(".external-search-bar-wrap")) {
+      externalSearchResults.hidden = true;
+    }
+  });
+}
 
 let currentSelection: { modelId: string; localId: number } | null = null;
 let currentModelId: string | null = null;

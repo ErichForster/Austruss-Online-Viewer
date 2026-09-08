@@ -23,6 +23,8 @@ export interface TreeNodeNames {
 // direct element references) instead of re-deriving labels or querying
 // the DOM on every keystroke.
 interface SearchNode {
+  localId: number | null;
+  label: string;
   wrap: HTMLElement;
   caret: HTMLElement;
   childrenEl: HTMLElement | null;
@@ -159,6 +161,31 @@ export class SpatialTree {
     if (this.groupsByModelId.size === 0) this.clear();
   }
 
+  // Flat list of matches (not the in-place panel filter below) — used by
+  // the external-viewer's standalone search dropdown, which has no full
+  // tree UI to filter in place. Leaf-only (a real, selectable item), same
+  // case-insensitive label match as applySearch, capped since a dropdown
+  // showing hundreds of results isn't useful to scroll through anyway.
+  search(query: string, limit = 30): { modelId: string; localId: number; label: string }[] {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const results: { modelId: string; localId: number; label: string }[] = [];
+    const walk = (node: SearchNode, modelId: string) => {
+      if (results.length >= limit) return;
+      if (node.localId !== null && node.labelLower.includes(q)) {
+        results.push({ modelId, localId: node.localId, label: node.label });
+      }
+      for (const child of node.children) {
+        if (results.length >= limit) return;
+        walk(child, modelId);
+      }
+    };
+    for (const [modelId, root] of this.searchRootsByModelId) {
+      walk(root, modelId);
+    }
+    return results;
+  }
+
   // Filters the tree to rows whose label contains the query (case-
   // insensitive) — matches by whatever's actually displayed, so this
   // covers both individual item names and assembly FrameNames. A group
@@ -287,6 +314,8 @@ export class SpatialTree {
     parentEl.appendChild(wrap);
 
     return {
+      localId: node.localId,
+      label: nodeLabel,
       wrap,
       caret,
       childrenEl,
