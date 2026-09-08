@@ -9,6 +9,19 @@ import type { TreeNodeNames } from "./tree";
 import { renderProperties } from "./properties";
 import type { ItemData, SpatialTreeItem } from "@thatopen/fragments";
 
+// See the comment on the --vh custom property in style.css — dvh support
+// is inconsistent enough on real mobile browsers (particularly in-app/
+// embedded ones, which a shared link is quite likely to be opened from)
+// that a JS-measured viewport height is the more reliable source of
+// truth. Recalculated on resize/orientation change so rotating doesn't
+// leave a stale value behind.
+function setViewportHeightVar() {
+  document.documentElement.style.setProperty("--vh", `${window.innerHeight * 0.01}px`);
+}
+setViewportHeightVar();
+window.addEventListener("resize", setViewportHeightVar);
+window.addEventListener("orientationchange", () => setTimeout(setViewportHeightVar, 100));
+
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
     promise,

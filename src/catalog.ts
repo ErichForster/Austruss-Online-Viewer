@@ -8,6 +8,15 @@ import {
   type DriveFile,
   type CatalogOverrides,
 } from "./drive";
+
+// See the comment on the --vh custom property in style.css.
+function setViewportHeightVar() {
+  document.documentElement.style.setProperty("--vh", `${window.innerHeight * 0.01}px`);
+}
+setViewportHeightVar();
+window.addEventListener("resize", setViewportHeightVar);
+window.addEventListener("orientationchange", () => setTimeout(setViewportHeightVar, 100));
+
 import { parseModelFilename, type ParsedModelName } from "./naming";
 
 // Duplicated from icons.ts rather than imported — see the note further

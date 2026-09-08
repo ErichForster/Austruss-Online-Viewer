@@ -76,6 +76,16 @@ body {
      the viewport — falls back to the 100% above on browsers that don't
      understand dvh (unsupported values are ignored, not applied). */
   height: 100dvh;
+  /* dvh support is inconsistent in practice on some Android WebViews and
+     in-app/embedded browsers (a shared link is quite likely to get
+     opened from inside Messages/Slack/etc., not always plain mobile
+     Safari/Chrome) — some claim support but still get it wrong. This is
+     a JS-computed measurement of the actual visible viewport (see
+     setViewportHeightVar in main.ts/catalog.ts), recalculated on resize
+     and orientation change, and wins over the dvh line above since it
+     comes later — but only once JS has actually run and set it; the
+     dvh/100% lines above are what paints before that first happens. */
+  height: calc(var(--vh, 1vh) * 100);
   background: var(--bg-void);
   color: var(--text-primary);
   font-family: var(--font-ui);
