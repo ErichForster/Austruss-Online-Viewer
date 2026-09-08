@@ -218,6 +218,7 @@ app.innerHTML = `
         </div>
         <div class="tree-search-wrap">
           <input type="text" id="tree-search-input" class="tree-search-input" placeholder="Search by name…" />
+          <button class="tree-search-clear" id="tree-search-clear" title="Clear search" hidden>${icon.close}</button>
         </div>
         <div class="panel-body" id="tree-root"></div>
       </aside>
@@ -529,8 +530,16 @@ const tree = new SpatialTree(
 );
 tree.clear();
 renderProperties(propsRoot, null);
+const treeSearchClear = $<HTMLButtonElement>("tree-search-clear");
 treeSearchInput.addEventListener("input", () => {
   tree.applySearch(treeSearchInput.value);
+  treeSearchClear.hidden = !treeSearchInput.value;
+});
+treeSearchClear.addEventListener("click", () => {
+  treeSearchInput.value = "";
+  tree.applySearch("");
+  treeSearchClear.hidden = true;
+  treeSearchInput.focus();
 });
 
 let currentSelection: { modelId: string; localId: number } | null = null;

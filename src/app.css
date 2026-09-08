@@ -1519,6 +1519,7 @@
 
 /* ---------- Model tree search ---------- */
 .tree-search-wrap {
+  position: relative;
   padding: 8px 10px;
   border-bottom: 1px solid var(--border-soft);
   flex-shrink: 0;
@@ -1533,12 +1534,43 @@
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-size: 13px;
-  padding: 0 10px;
+  padding: 0 30px 0 10px;
 }
 
 .tree-search-input:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+.tree-search-clear {
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.tree-search-clear:hover {
+  color: var(--text-primary);
+  background: var(--bg-panel);
+}
+
+.tree-search-clear svg {
+  width: 12px;
+  height: 12px;
+}
+
+.tree-search-clear[hidden] {
+  display: none;
 }
 
 .tree-row.search-match {
@@ -1556,5 +1588,15 @@
   .tree-search-input {
     height: 42px;
     font-size: 16px;
+  }
+
+  .tree-search-clear {
+    width: 28px;
+    height: 28px;
+  }
+
+  .tree-search-clear svg {
+    width: 15px;
+    height: 15px;
   }
 }
