@@ -161,6 +161,21 @@ export class SpatialTree {
     if (this.groupsByModelId.size === 0) this.clear();
   }
 
+  // Same idea as firstSelectableDescendant above, but walking the
+  // SearchNode structure instead of the raw SpatialTreeItem tree — used
+  // so a search match on a group (an assembly's FrameName, most often)
+  // resolves to something with actual visible geometry to select and
+  // zoom to, rather than the assembly's own container entity, which
+  // usually has none of its own.
+  private static firstSelectableSearchDescendant(node: SearchNode): number | null {
+    for (const child of node.children) {
+      if (child.localId !== null) return child.localId;
+      const found = SpatialTree.firstSelectableSearchDescendant(child);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+
   // Flat list of matches (not the in-place panel filter below) — used by
   // the external-viewer's standalone search dropdown, which has no full
   // tree UI to filter in place. Leaf-only (a real, selectable item), same
@@ -173,7 +188,15 @@ export class SpatialTree {
     const walk = (node: SearchNode, modelId: string) => {
       if (results.length >= limit) return;
       if (node.localId !== null && node.labelLower.includes(q)) {
-        results.push({ modelId, localId: node.localId, label: node.label });
+        // A match on a group (e.g. an assembly's FrameName) resolves to
+        // its first real member instead of its own localId, the same
+        // way clicking a group row does in the in-panel tree — the
+        // assembly entity itself usually has no geometry of its own to
+        // select or zoom to.
+        const targetId = node.children.length
+          ? SpatialTree.firstSelectableSearchDescendant(node) ?? node.localId
+          : node.localId;
+        results.push({ modelId, localId: targetId, label: node.label });
       }
       for (const child of node.children) {
         if (results.length >= limit) return;

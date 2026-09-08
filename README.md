@@ -106,9 +106,14 @@ unless you're testing a Pages-path build locally
   mean scrolling and expanding by hand; a match keeps its whole ancestor
   chain expanded and visible rather than hiding inside a collapsed group,
   and clears back to the normal collapsed view when the box is emptied.
-  Available in external/share mode too, and sized larger on mobile
-  specifically (bigger tap target, 16px+ text to stop the page
-  auto-zooming when the field gets focus)
+  Sized larger on mobile for a bigger tap target, and 16px+ text to stop
+  the page auto-zooming when the field gets focus — that font-size stays
+  fixed regardless of screen width (dropping it on a small screen would
+  bring the auto-zoom problem right back), but the height and padding
+  scale smoothly with actual screen width via `clamp()` rather than one
+  fixed size for every phone, so a narrow portrait phone gets a visibly
+  more compact bar than a wider one instead of both using a size tuned
+  for the widest case
 - **Properties panel** (right) — attributes plus property sets
   (`IsDefinedBy` → `HasProperties`) for whatever's selected
 - **Selection info pin** — selecting an element (canvas click or tree)
@@ -363,16 +368,21 @@ too, on every screen size, not just mobile. Those were replaced with a
 standalone search bar (below the toolbar) that finds an item by name or
 assembly FrameName and jumps straight to it — reusing the same search
 index the in-panel tree search builds, just shown as a compact flat
-dropdown instead of a filtered hierarchy. This was a deliberate
-simplification for what the install team actually needs on site (find a
-specific frame, look at it) rather than a scope creep — browsing the
-full spatial hierarchy or reading IFC property sets was never the
-point of a locked link, and the full-height Tree/Properties panels were
-also the source of a stubborn mobile sizing bug that never got fully
-diagnosed; removing them for external mode sidesteps that entirely
-rather than continuing to chase it blind. Kept: Fit view, Isolate, Hide,
-Show all, Home (recall only), theme toggle, and — per request — the
-ability to *select* (not create) saved Locations, if any were included
+dropdown instead of a filtered hierarchy. Clicking a match that's a
+group (an assembly's FrameName, most often) resolves to its first real
+member rather than the assembly's own container entity, same as
+clicking a group row does in the in-panel tree — the assembly itself
+usually has no geometry of its own to select or zoom to. This was a
+deliberate simplification for what the install team actually needs on
+site (find a specific frame, look at it) rather than a scope creep —
+browsing the full spatial hierarchy or reading IFC property sets was
+never the point of a locked link, and the full-height Tree/Properties
+panels were also the source of a stubborn mobile sizing bug that never
+got fully diagnosed; removing them for external mode sidesteps that
+entirely rather than continuing to chase it blind. Kept: Fit view,
+Isolate, Hide, Show all, Home (recall only), theme toggle, and — per
+request — the ability to *select* (not create) saved Locations, if any
+were included
 in the link. "Browse models" in the header becomes "Other zones,"
 linking to the catalog in the same restricted mode instead of the full
 company catalog.

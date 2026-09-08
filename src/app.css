@@ -1610,16 +1610,28 @@
 }
 
 /* Mobile: bigger tap target, and 16px+ font avoids Safari/Chrome
-   auto-zooming the page when the input gets focus. */
+   auto-zooming the page when the input gets focus. clamp() scales the
+   height/padding smoothly with the actual screen width instead of one
+   fixed size for every phone lumped under "mobile" — a narrow portrait
+   phone gets a noticeably more compact bar than a wider one, rather
+   than both getting the same size tuned for the widest case. Font-size
+   stays a fixed 16px regardless of width — that one's not scaled, since
+   dropping below it on a small screen would reintroduce the auto-zoom
+   problem this is meant to avoid, on exactly the screens most likely to
+   trigger it. */
 @media (max-width: 768px), (max-height: 500px) {
   .tree-search-input {
-    height: 42px;
+    height: clamp(36px, 10vw, 42px);
     font-size: 16px;
   }
 
+  .tree-search-wrap {
+    padding: clamp(6px, 2vw, 8px) clamp(8px, 3vw, 12px);
+  }
+
   .tree-search-clear {
-    width: 28px;
-    height: 28px;
+    width: clamp(24px, 6vw, 28px);
+    height: clamp(24px, 6vw, 28px);
   }
 
   .tree-search-clear svg {
@@ -1686,4 +1698,16 @@
   color: var(--text-muted);
   font-size: 12.5px;
   text-align: center;
+}
+
+/* Same clamp() treatment as .tree-search-wrap above, kept as a separate
+   rule (rather than combined into that earlier mobile block) so it
+   comes after this file's base .external-search-bar-wrap rule and
+   actually wins the cascade — combining them further up in the file put
+   this override before that base rule, where it was silently losing to
+   it despite matching. */
+@media (max-width: 768px), (max-height: 500px) {
+  .external-search-bar-wrap {
+    padding: clamp(6px, 2vw, 8px) clamp(8px, 3vw, 12px);
+  }
 }
