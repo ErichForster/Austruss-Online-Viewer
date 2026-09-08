@@ -1630,6 +1630,7 @@
 
 /* ---------- External-mode standalone search bar ---------- */
 .external-search-bar-wrap {
+  position: relative;
   padding: 8px 12px;
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border);
