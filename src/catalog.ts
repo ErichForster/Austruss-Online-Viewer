@@ -58,6 +58,22 @@ function withExternalParams(url: URL): URL {
   return url;
 }
 
+// Both pages share the same origin, so a home view saved from the
+// viewer (setout-home:<filename> in localStorage) is readable here too
+// — used so opening a model from the external catalog carries its home
+// view across the same way buildExternalLink() does in the viewer's own
+// Share button, rather than silently dropping it because this page
+// builds its "Open" links independently (kept that way deliberately, to
+// preserve this page's own bundle independence from the viewer's).
+function getHomeViewForFilename(filename: string): { point: { x: number; y: number; z: number }; cameraPosition: { x: number; y: number; z: number } } | null {
+  try {
+    const raw = localStorage.getItem(`setout-home:${filename}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 const app = document.getElementById("app")!;
 
 app.innerHTML = `
@@ -244,6 +260,10 @@ function render(entries: Entry[]) {
           );
           linkUrl.searchParams.set("fileId", entry.file.id);
           linkUrl.searchParams.set("name", entry.file.name);
+          if (isExternalMode) {
+            const home = getHomeViewForFilename(entry.file.name);
+            if (home) linkUrl.searchParams.set("home", JSON.stringify(home));
+          }
           link.href = linkUrl.toString();
           link.innerHTML = `
             <span class="model-drawing">${escapeHtml(entry.parsed.drawingNumber)}</span>
