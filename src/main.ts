@@ -5,8 +5,9 @@ import { toDataURL as qrToDataURL } from "qrcode";
 import { icon } from "./icons";
 import { IfcViewer, type Theme } from "./viewer";
 import { SpatialTree } from "./tree";
+import type { TreeNodeNames } from "./tree";
 import { renderProperties } from "./properties";
-import type { ItemData } from "@thatopen/fragments";
+import type { ItemData, SpatialTreeItem } from "@thatopen/fragments";
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
@@ -199,6 +200,9 @@ app.innerHTML = `
           </div>
           <button class="panel-close mobile-only" id="close-tree" title="Close">${icon.close}</button>
         </div>
+        <div class="tree-search-wrap">
+          <input type="text" id="tree-search-input" class="tree-search-input" placeholder="Search by name…" />
+        </div>
         <div class="panel-body" id="tree-root"></div>
       </aside>
       <div class="viewport-wrap" id="viewport-wrap">
@@ -290,6 +294,7 @@ const dropzone = $("dropzone");
 const fileInput = $<HTMLInputElement>("file-input");
 const viewportWrap = $("viewport-wrap");
 const treeRoot = $("tree-root");
+const treeSearchInput = $<HTMLInputElement>("tree-search-input");
 const propsRoot = $("props-root");
 const selectionPin = $("selection-pin");
 const selectionPinName = $("selection-pin-name");
@@ -481,6 +486,9 @@ const tree = new SpatialTree(
 );
 tree.clear();
 renderProperties(propsRoot, null);
+treeSearchInput.addEventListener("input", () => {
+  tree.applySearch(treeSearchInput.value);
+});
 
 let currentSelection: { modelId: string; localId: number } | null = null;
 let currentModelId: string | null = null;
@@ -503,6 +511,54 @@ function findPropertyValue(data: ItemData, propName: string): string | null {
     }
   }
   return null;
+}
+
+// Batch-fetches display labels for the whole spatial tree in two calls
+// rather than one per row (a large model can easily have many thousands
+// of tree nodes) — a lightweight Name-only fetch for everything, and a
+// heavier one with property sets for assembly-level nodes specifically,
+// since FrameName lives in a pset and assemblies are far less numerous
+// than individual members.
+async function fetchTreeNames(
+  model: Awaited<ReturnType<typeof viewer.loadIfc>>,
+  structure: SpatialTreeItem,
+): Promise<TreeNodeNames> {
+  const allIds: number[] = [];
+  const assemblyIds: number[] = [];
+  const walk = (node: SpatialTreeItem) => {
+    if (node.localId !== null) {
+      allIds.push(node.localId);
+      if (node.category === "IFCELEMENTASSEMBLY") assemblyIds.push(node.localId);
+    }
+    for (const child of node.children ?? []) walk(child);
+  };
+  walk(structure);
+
+  const names = new Map<number, string>();
+  const frameNames = new Map<number, string>();
+
+  if (allIds.length) {
+    const nameData = await model.getItemsData(allIds, { attributes: ["Name"], attributesDefault: false });
+    allIds.forEach((id, i) => {
+      const name = (nameData[i]?.Name as { value?: unknown } | undefined)?.value;
+      if (typeof name === "string" && name) names.set(id, name);
+    });
+  }
+
+  if (assemblyIds.length) {
+    const assemblyData = await model.getItemsData(assemblyIds, {
+      attributesDefault: false,
+      relations: { IsDefinedBy: { attributes: true, relations: true } },
+    });
+    assemblyIds.forEach((id, i) => {
+      const data = assemblyData[i];
+      if (!data) return;
+      const frameName = findPropertyValue(data, "FrameName");
+      if (frameName) frameNames.set(id, frameName);
+    });
+  }
+
+  return { names, frameNames };
 }
 
 let pinPoint: { x: number; y: number; z: number } | null = null;
@@ -800,7 +856,14 @@ async function handleFile(file: File, mode: "replace" | "add" = "replace") {
     );
     const tTree = performance.now();
     const { formatModelLabel } = await import("./model-picker");
-    tree.addModel(model.modelId, await formatModelLabel(file.name), structure);
+    const treeNames = await withTimeout(fetchTreeNames(model, structure), 15000, "fetchTreeNames").catch((err) => {
+      // Tree still renders fine with the old category-based labels if
+      // this fails or a very large model makes it too slow — not worth
+      // failing the whole load over a labelling nicety.
+      console.error("[handleFile] fetchTreeNames failed, falling back to category labels", err);
+      return undefined;
+    });
+    tree.addModel(model.modelId, await formatModelLabel(file.name), structure, treeNames);
     console.log(`[handleFile] tree.addModel() done (${((performance.now() - tTree) / 1000).toFixed(1)}s)`);
   } catch (err) {
     console.error(err);
@@ -1263,6 +1326,25 @@ function updateHomeButtonState() {
   }
   btnHome.disabled = !currentModelId || !getHomeView(currentModelId);
 }
+// A save that renames the file (very common on a model's first save,
+// since a freshly-imported filename rarely matches the naming
+// convention) would otherwise orphan any Home view or Locations already
+// set up before saving — they're keyed by the pre-rename name, so a
+// future reopen (which uses the new, saved name as its modelId) would
+// never find them. Copying that data across at save time means setting
+// up Home/Locations before the very first save just works, rather than
+// needing to reopen the file and redo it under the new name.
+function migrateLocationAndHomeData(oldModelId: string, newModelId: string) {
+  if (oldModelId === newModelId) return;
+  try {
+    const oldLocations = localStorage.getItem(locationsKey(oldModelId));
+    if (oldLocations) localStorage.setItem(locationsKey(newModelId), oldLocations);
+    const oldHome = localStorage.getItem(homeKey(oldModelId));
+    if (oldHome) localStorage.setItem(homeKey(newModelId), oldHome);
+  } catch {
+    // Storage quota etc. — not worth interrupting the save over.
+  }
+}
 btnSetHome.addEventListener("click", () => {
   if (!currentModelId) return;
   setHomeView(currentModelId, {
@@ -1661,6 +1743,7 @@ async function saveModelToDrive(modelId: string, filename: string, signal?: Abor
 
 async function saveToDrive(filename: string, projectName?: string) {
   if (!currentModelId) return;
+  migrateLocationAndHomeData(currentModelId, filename);
   savePicker.hidden = true;
   const controller = new AbortController();
   showSaveOverlaySaving(`Saving ${filename} to Drive…`, controller);

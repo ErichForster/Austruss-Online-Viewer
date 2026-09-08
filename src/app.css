@@ -1503,3 +1503,45 @@
   font-weight: 600;
   color: var(--text-primary);
 }
+
+/* ---------- Model tree search ---------- */
+.tree-search-wrap {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  flex-shrink: 0;
+}
+
+.tree-search-input {
+  width: 100%;
+  height: 34px;
+  box-sizing: border-box;
+  background: var(--bg-panel-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 13px;
+  padding: 0 10px;
+}
+
+.tree-search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.tree-row.search-match {
+  background: var(--accent-soft);
+}
+
+.tree-row.search-match .tree-label {
+  font-weight: 600;
+  color: var(--accent-strong);
+}
+
+/* Mobile: bigger tap target, and 16px+ font avoids Safari/Chrome
+   auto-zooming the page when the input gets focus. */
+@media (max-width: 768px) {
+  .tree-search-input {
+    height: 42px;
+    font-size: 16px;
+  }
+}

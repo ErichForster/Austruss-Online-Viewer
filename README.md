@@ -55,7 +55,12 @@ unless you're testing a Pages-path build locally
   around. Saved per model (by filename) in the browser's local storage,
   so they're specific to this device and this model file, not shared via
   Drive. Older saved locations from before camera position was captured
-  still work — they just recall the pivot alone
+  still work — they just recall the pivot alone. Since these are keyed
+  by filename, and a first save often renames the file (see "Naming
+  convention" below), saving migrates any Locations/Home data already
+  set up under the old, pre-rename name across to the new one — so
+  setting these up right after importing a model, before its first save,
+  just works rather than needing to redo it once the file's been renamed
 - **Home view** — separate from named Locations: **Set Home** captures
   the current view as a single dedicated view for that model, no naming
   needed; **Home** recalls it, and it's also what a model opens to
@@ -80,8 +85,30 @@ unless you're testing a Pages-path build locally
   metre-scale IFC models — not derived from the model's own scale, and
   not screen-space-constant (they'll look larger up close, smaller from a
   distance, like anything else in the scene)
-- **Spatial tree** (left panel) — click any node to select and zoom the
-  corresponding element; category badges show the IFC entity type
+- **Spatial tree** (left panel) — category badges show the IFC entity
+  type; rows show the item's real IFC Name where one exists (falling
+  back to the category if not), and assembly-level rows (IFCELEMENTASSEMBLY)
+  show their FrameName property instead, since that's a far more useful
+  label for a group of members than a generic category name. Names are
+  fetched in two batched calls right after a model loads — one
+  lightweight Name-only pass for every row, one heavier pass with
+  property sets for assemblies specifically — rather than one request
+  per row, but a very large model could still make this noticeably
+  slower to populate; the tree still renders immediately either way,
+  falling back to category-only labels if the name fetch is slow or
+  fails. Clicking a leaf row selects and zooms that element; clicking a
+  row with children (a storey, an assembly, anything grouped) selects
+  its first descendant instead of the group's own container entity,
+  which usually isn't itself worth looking at directly — the caret is
+  still the way to expand/collapse without navigating anywhere. A search
+  box above the tree filters by whatever's actually shown — item names
+  and assembly FrameNames alike — so finding a specific frame doesn't
+  mean scrolling and expanding by hand; a match keeps its whole ancestor
+  chain expanded and visible rather than hiding inside a collapsed group,
+  and clears back to the normal collapsed view when the box is emptied.
+  Available in external/share mode too, and sized larger on mobile
+  specifically (bigger tap target, 16px+ text to stop the page
+  auto-zooming when the field gets focus)
 - **Properties panel** (right) — attributes plus property sets
   (`IsDefinedBy` → `HasProperties`) for whatever's selected
 - **Selection info pin** — selecting an element (canvas click or tree)
