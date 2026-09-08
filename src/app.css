@@ -429,6 +429,19 @@
   grid-template-columns: 0px 1fr 0px;
 }
 
+/* External mode removes the tree/properties panels from the DOM's grid
+   participation entirely (display:none via external-hide), not just
+   visually — leaving only one actual grid item (the viewport) but still
+   3 defined column tracks. That item auto-places into column 1 (0px,
+   since forced collapsed) rather than the middle 1fr column it needs,
+   which is what actually broke the desktop viewport, same underlying
+   mistake as the .shell row issue above just on the column axis this
+   time. A single column sidesteps the ambiguity entirely rather than
+   patching around auto-placement again. */
+.external-mode .body.tree-collapsed.props-collapsed {
+  grid-template-columns: 1fr;
+}
+
 .panel {
   background: var(--bg-panel);
   min-height: 0;
