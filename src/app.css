@@ -23,6 +23,7 @@
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border);
   -webkit-app-region: drag;
+  min-width: 0;
 }
 
 .filename {
@@ -415,6 +416,7 @@
   display: grid;
   grid-template-columns: 260px 1fr 300px;
   min-height: 0;
+  min-width: 0;
 }
 
 .body.tree-collapsed {
@@ -1380,6 +1382,7 @@
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     max-width: 100%;
+    min-width: 0;
   }
 
   .toolbar::-webkit-scrollbar {
@@ -1550,6 +1553,7 @@
   padding: 8px 10px;
   border-bottom: 1px solid var(--border-soft);
   flex-shrink: 0;
+  min-width: 0;
 }
 
 .tree-search-input {
@@ -1647,10 +1651,12 @@
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  min-width: 0;
 }
 
 .external-search-bar {
   position: relative;
+  min-width: 0;
 }
 
 .external-search-results {
