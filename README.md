@@ -174,13 +174,24 @@ unless you're testing a Pages-path build locally
   whatever's loaded) — normal viewer only, not the external/share mode
 - Both side panels collapse via the small toggle buttons in the viewport
   gutters
-- **Mobile layout** (≤768px) — the side panels become full-screen overlays
-  (hidden by default, opened via the same gutter toggles, each with its
-  own close button since the toggle that opened it gets covered once the
-  overlay is up), the toolbar condenses to Fit / Isolate / Show all /
-  theme toggle (Open IFC is desktop-only — mobile use is expected to be
-  arriving via a shared link, not local upload), and the header logo and
-  nav link shrink to icon-only. Touch orbit/pan/zoom comes from
+- **Mobile layout** (≤768px width, or ≤500px height to also catch
+  landscape phones — see below) — the side panels become full-screen
+  overlays (hidden by default, opened via the same gutter toggles, each
+  with its own close button since the toggle that opened it gets covered
+  once the overlay is up), the toolbar condenses to Fit / Home / Isolate
+  / Hide / Show all / theme toggle (desktop-only tools like Set Pivot,
+  Locations, Background, and Save are hidden — mobile use is expected to
+  be arriving via a shared link, not local upload/editing), and the
+  header logo and nav link shrink to icon-only. If the condensed toolbar
+  still doesn't fit some particular screen, it scrolls horizontally
+  rather than clipping — found and fixed a real bug here where it had no
+  overflow handling at all, so anything that didn't fit was silently cut
+  off at the edge with no way to reach it. The breakpoint itself was
+  originally width-only, which misses landscape phones entirely — many
+  are wider than 768px in landscape, so the query wouldn't match and the
+  *full* desktop toolbar would render instead, which was never going to
+  fit regardless of scrolling; adding the height condition catches those
+  too, orientation aside. Touch orbit/pan/zoom comes from
   `camera-controls`' own defaults (one-finger orbit, two-finger
   pinch-zoom + pan) — verified against its source rather than assumed,
   and `touch-action: none` is set on the canvas so the browser doesn't

@@ -392,7 +392,7 @@ const toggleProps = $("toggle-props");
 // On mobile the side panels are full-screen overlays rather than grid
 // columns (see the ≤768px rules in app.css), so they should start hidden
 // rather than open over the viewport the moment the page loads.
-const isMobileLayout = window.matchMedia("(max-width: 768px)").matches;
+const isMobileLayout = window.matchMedia("(max-width: 768px), (max-height: 500px)").matches;
 let treeCollapsed = isMobileLayout;
 let propsCollapsed = isMobileLayout;
 function applyPanelState() {

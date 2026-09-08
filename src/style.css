@@ -196,7 +196,7 @@ button {
 }
 
 /* ---------- Shared mobile layout (≤768px), both pages ---------- */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) {
   .wordmark-text,
   .nav-link-text {
     display: none;

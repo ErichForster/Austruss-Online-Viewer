@@ -1316,7 +1316,7 @@
 }
 
 /* ---------- Mobile layout (≤768px) ---------- */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) {
   /* Hidden on mobile per scope decision — desktop-only tools. The topbar
      row also switches to auto height so a wrapped second line (if the
      remaining core buttons don't fit one row) doesn't get clipped. */
@@ -1348,6 +1348,19 @@
 
   .toolbar {
     gap: 4px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    max-width: 100%;
+  }
+
+  .toolbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tool-btn {
+    flex-shrink: 0;
   }
 
   /* Side panels stop being grid columns and become overlays covering the
@@ -1539,7 +1552,7 @@
 
 /* Mobile: bigger tap target, and 16px+ font avoids Safari/Chrome
    auto-zooming the page when the input gets focus. */
-@media (max-width: 768px) {
+@media (max-width: 768px), (max-height: 500px) {
   .tree-search-input {
     height: 42px;
     font-size: 16px;
