@@ -275,6 +275,7 @@ app.innerHTML = `
       <div class="save-overlay-spinner" id="save-overlay-spinner"></div>
       <div class="save-overlay-check" id="save-overlay-check" hidden>${icon.check}</div>
       <p class="save-overlay-message" id="save-overlay-message">Saving…</p>
+      <img class="save-overlay-qr" id="save-overlay-qr" alt="QR code for the share link" hidden />
       <button class="tool-btn" id="save-overlay-cancel">Cancel</button>
       <button class="upload-btn" id="save-overlay-close" hidden>Close</button>
     </div>
@@ -337,6 +338,7 @@ const saveOverlay = $("save-overlay");
 const saveOverlaySpinner = $("save-overlay-spinner");
 const saveOverlayCheck = $("save-overlay-check");
 const saveOverlayMessage = $("save-overlay-message");
+const saveOverlayQr = $<HTMLImageElement>("save-overlay-qr");
 const saveOverlayCancelBtn = $<HTMLButtonElement>("save-overlay-cancel");
 const saveOverlayCloseBtn = $<HTMLButtonElement>("save-overlay-close");
 let activeSaveController: AbortController | null = null;
@@ -346,15 +348,22 @@ function showSaveOverlaySaving(message: string, controller: AbortController) {
   saveOverlayMessage.textContent = message;
   saveOverlaySpinner.hidden = false;
   saveOverlayCheck.hidden = true;
+  saveOverlayQr.hidden = true;
   saveOverlayCancelBtn.hidden = false;
   saveOverlayCloseBtn.hidden = true;
   saveOverlay.hidden = false;
 }
-function showSaveOverlayDone(html: string) {
+function showSaveOverlayDone(html: string, qrDataUrl?: string) {
   activeSaveController = null;
   saveOverlayMessage.innerHTML = html;
   saveOverlaySpinner.hidden = true;
   saveOverlayCheck.hidden = false;
+  if (qrDataUrl) {
+    saveOverlayQr.src = qrDataUrl;
+    saveOverlayQr.hidden = false;
+  } else {
+    saveOverlayQr.hidden = true;
+  }
   saveOverlayCancelBtn.hidden = true;
   saveOverlayCloseBtn.hidden = false;
 }
@@ -1114,22 +1123,35 @@ shareModal.addEventListener("click", (e) => {
   if (e.target === shareModal) closeShareModal();
 });
 
+// Builds the app's own restricted external-viewer link for a Drive-saved
+// model (fileId/name/job), rather than Drive's own file URL — shared by
+// the Share button and the post-save success screen, which both need to
+// point people at the locked-down viewer, not a raw Drive page.
+async function buildExternalLink(fileId: string, name: string): Promise<string> {
+  const { parseModelFilename } = await import("./model-picker");
+  const parsed = parseModelFilename(name);
+  const url = new URL(`${import.meta.env.BASE_URL}index.html`, location.origin);
+  url.searchParams.set("external", "1");
+  url.searchParams.set("fileId", fileId);
+  url.searchParams.set("name", name);
+  if (parsed) url.searchParams.set("job", parsed.jobNumber);
+  // name is the modelId a Home view would be keyed under — include it
+  // automatically if one's been set, since there's no reason someone
+  // would set a home view and NOT want it carried into the link they're
+  // about to share (unlike Locations, which stay opt-in/manual, since
+  // sharing all of them isn't necessarily wanted).
+  const home = getHomeView(name);
+  if (home) url.searchParams.set("home", JSON.stringify(home));
+  return url.toString();
+}
+
 btnShare.addEventListener("click", async () => {
   if (!currentModelId) return;
   const fileId = modelDriveFileIds.get(currentModelId);
   const name = loadedModels.get(currentModelId);
   if (!fileId || !name) return;
 
-  const { parseModelFilename } = await import("./model-picker");
-  const parsed = parseModelFilename(name);
-
-  const url = new URL(`${import.meta.env.BASE_URL}index.html`, location.origin);
-  url.searchParams.set("external", "1");
-  url.searchParams.set("fileId", fileId);
-  url.searchParams.set("name", name);
-  if (parsed) url.searchParams.set("job", parsed.jobNumber);
-  const linkText = url.toString();
-
+  const linkText = await buildExternalLink(fileId, name);
   shareLinkInput.value = linkText;
   shareQrImg.src = await qrToDataURL(linkText, { width: 400, margin: 1 });
   shareModal.hidden = false;
@@ -1643,7 +1665,7 @@ async function saveToDrive(filename: string, projectName?: string) {
   const controller = new AbortController();
   showSaveOverlaySaving(`Saving ${filename} to Drive…`, controller);
   try {
-    const link = await saveModelToDrive(currentModelId, filename, controller.signal);
+    await saveModelToDrive(currentModelId, filename, controller.signal);
     if (projectName) {
       const { parseModelFilename, saveProjectNameOverride } = await import("./model-picker");
       const parsed = parseModelFilename(filename);
@@ -1664,9 +1686,20 @@ async function saveToDrive(filename: string, projectName?: string) {
     currentFileName = filename;
     updateFilenameDisplay();
     updateShareButtonState();
-    showSaveOverlayDone(
-      `Saved <strong>${filename.replace(/</g, "&lt;")}</strong>.<br><a href="${link}" target="_blank" rel="noopener">Open share link ↗</a>`,
-    );
+    const fileId = modelDriveFileIds.get(currentModelId);
+    if (fileId) {
+      const externalLink = await buildExternalLink(fileId, filename);
+      const qrDataUrl = await qrToDataURL(externalLink, { width: 400, margin: 1 });
+      showSaveOverlayDone(
+        `Saved <strong>${filename.replace(/</g, "&lt;")}</strong>.<br><a href="${externalLink}" target="_blank" rel="noopener">Open share link ↗</a>`,
+        qrDataUrl,
+      );
+    } else {
+      // Shouldn't normally happen — a successful save always yields a
+      // fileId — but showing the plain success message beats a crash if
+      // it somehow doesn't.
+      showSaveOverlayDone(`Saved <strong>${filename.replace(/</g, "&lt;")}</strong>.`);
+    }
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
       return; // cancelled — overlay's already closed, no error to show

@@ -61,8 +61,11 @@ unless you're testing a Pages-path build locally
   needed; **Home** recalls it, and it's also what a model opens to
   automatically instead of the usual fit-to-model framing. **Home** (not
   Set Home) is available in external/share mode too, sourced from a
-  `?home=` link parameter instead of local storage, same shape as
-  `?locations=` below
+  `?home=` link parameter instead of local storage. If a home view is
+  set for a model, both the Share button and the save-success screen
+  automatically include it in the generated link — no manual step needed
+  (unlike Locations below, which stay opt-in since sharing all of them
+  isn't necessarily wanted)
 - **Pivot and location markers** — a small green sphere in the 3D scene
   shows the current pivot point, updated only when it's deliberately set
   (Set Pivot, recalling a Location, or selecting an element — selecting
@@ -133,8 +136,11 @@ unless you're testing a Pages-path build locally
   Saving to Drive shows a full-page blocking overlay with a spinner and a
   Cancel button — added after people were clicking Save multiple times in
   a row with no visible sign the page was busy — which switches to a
-  checkmark and the file's Drive share link once it finishes, with its
-  own Close button
+  checkmark, a QR code, and a link once it finishes, with its own Close
+  button. That link (and the QR code) point at the app's own restricted
+  external viewer — same link the Share button generates — not Drive's
+  own file page, since the point is to hand someone something they can
+  actually open and look at
 - Light/dark theme toggle, persisted across visits — defaults to light on
   a first visit with nothing saved yet
 - The Austruss logo/wordmark links back to a blank `index.html` (clears
@@ -343,10 +349,12 @@ Application → Local Storage → find the `setout-locations:<filename>` key
 — that's the same shape, ready to copy into the array above, append to
 the Share button's link, and URL-encode.
 
-To include a Home view (the "Home" button works in external mode, "Set
-Home" doesn't — nothing to persist to there), add a `home` parameter —
-the same `{point, cameraPosition}` shape as one Location entry, not
-wrapped in an array:
+This is normally automatic — the Share button and the save-success
+screen both include a model's `home` parameter on their own if one's
+been set (via "Set Home"). The manual version below is only for building
+a link entirely by hand, or overriding what's currently set: add a
+`home` parameter — the same `{point, cameraPosition}` shape as one
+Location entry, not wrapped in an array:
 
 ```
 &home=%7B%22point%22%3A%7B%22x%22%3A1.2%2C%22y%22%3A0%2C%22z%22%3A3.4%7D%2C%22cameraPosition%22%3A%7B%22x%22%3A5%2C%22y%22%3A3%2C%22z%22%3A8%7D%7D
@@ -357,6 +365,8 @@ which decodes to:
 ```
 Find real coordinates the same way — dev tools → Local Storage → the
 `setout-home:<filename>` key for a model you've clicked "Set Home" on.
+("Home" works in external mode; "Set Home" doesn't — nothing to persist
+to there.)
 
 The equivalent catalog link for "other zones in this project":
 ```

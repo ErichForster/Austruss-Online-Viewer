@@ -1464,6 +1464,14 @@
   max-width: 260px;
 }
 
+.save-overlay-qr {
+  width: 160px;
+  height: 160px;
+  border-radius: var(--radius-sm);
+  background: #fff;
+  padding: 6px;
+}
+
 /* .tool-btn / .upload-btn both set display:flex unconditionally with no
    [hidden] guard (see the long history of this exact bug elsewhere in
    this file) — these two buttons are the first place hidden is toggled
